@@ -94,6 +94,17 @@ repo/
 └─ .github/      CI：lint + test
 ```
 
+仓库之外（同一工作区 `E:\projects\commerce-core\`，不是 Git 仓库的一部分）：
+
+```
+├─ repo/     正式 Git 仓库，即上面这棵树
+├─ ops/      runbook.md（这台机器的事实与固定操作）、server-log.md（每次服务器操作流水）
+├─ archive/  只读冻结件，永不修改、永不删除（§1.12）
+└─ assets/   截图等素材
+```
+
+动服务器前先读 `ops/runbook.md`；每次连接服务器做过什么（哪怕只读）都往 `ops/server-log.md` 追加一条。
+
 不确定改哪个文件时先读这里；这里只写到目录级，细到文件的清单一定会过期，**过期的地图比没有更糟**。
 
 ## §5 文档索引
