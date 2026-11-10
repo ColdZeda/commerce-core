@@ -15,9 +15,9 @@ load_dotenv(REPO_DIR / ".env")
 
 
 def env(name: str, default: str | None = None) -> str:
-    """读环境变量；既无值也无默认值时立即失败，避免用错配置静默启动。"""
+    """读环境变量；必填项为空或缺失时立即失败，避免用错配置静默启动。"""
     value = os.environ.get(name, default)
-    if value is None:
+    if value is None or (value == "" and default is None):
         raise RuntimeError(f"缺少必需的环境变量：{name}")
     return value
 
