@@ -27,12 +27,9 @@
 - [x] 重复领券 / 超发返回正确业务码：`COUPON_ALREADY_CLAIMED`、`COUPON_SOLD_OUT`，不能是 500
 - [x] 刷新页面不掉登录：`/auth/me` 能恢复会话
 - [x] 并发领券测试通过（真实 MySQL，独立线程连接），`issued_qty` 不超 `total_qty`
-- [ ] 停 grounded-qa → 起 commerce 最小栈 → 外网可达 → 记录内存实测
+- [x] 停 grounded-qa → 起 commerce 最小栈 → 外网可达 → 记录内存实测
       （原计划"再切回 grounded"按用户 2026-11-10 的决定取消，见 `docs/plan-changes.md` D-004）
 - [x] 不测尚未完成的下单
-
-> 服务器那一项还没做：需要用户先在本机 `docker login` ACR，再按 `ops/runbook.md` 的流程停 grounded-qa。
-> 在它完成之前本阶段不算收口。
 
 ## 实施顺序
 
@@ -115,3 +112,30 @@ npm run build                   → 成功
 容器内同样验证：重建镜像后 `/api/v1/health` 200、`/api/v1/coupons` 返回 3 张券、登录 200。
 
 本地演示用户 `demo` 只存在于开发库（`seed_demo` 不建用户），公网 demo 用户的初始化方式留给 S8。
+
+### E6 服务器最小栈与外网冒烟（2026-11-10）
+
+部署到 `/opt/commerce-core`：api + mysql + redis + nginx，四个镜像全部来自 ACR（`commerce-core/` 命名空间），
+容器里只有 nginx 发布 `8080`。详细流水见 `ops/server-log.md`。
+
+```text
+docker compose ps            → commerce-api/mysql/redis 均 healthy，commerce-nginx Up 0.0.0.0:8080->80
+容器内 /api/v1/health        → 200 {"status":"ok","db":true,"redis":true}
+外网 /api/v1/health          → 200 同上
+外网 /api/v1/products        → 200 count=6（seed 6 商品 9 SKU）
+外网 /api/v1/coupons         → 200 count=3
+外网 /admin/                 → 404（C1）
+外网 /未知路径               → 404
+内存                          → total 1613 MB / used 780 MB / available 832 MB
+容器占用                      → nginx 17.6 / api 136 / redis 14.2 / mysql 206 MB
+```
+
+两个实际踩到的坑，已写进 `ops/runbook.md`：
+
+1. **Docker Hub 加速器对 `redis:7.4.2` 返回 not found**：改为把 mysql / redis / nginx 也复制到 ACR，
+   `docker-compose.prod.yml` 里四个镜像统一走 ACR。
+2. **首次 `up -d` 后没迁移**：`/api/v1/products` 500 而 health 仍 200（health 只查连接）。
+   补 `docker compose run --rm api python manage.py migrate` + `seed_demo` 后恢复；部署流程里必须带迁移。
+
+grounded-qa 主栈已按计划停掉（`down` 不带 `-v`，卷保留）；它的 `gq-feishu` 属于另一份 compose，
+按"只操作本项目栈"的红线未处置。
