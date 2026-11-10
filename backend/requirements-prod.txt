@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# 仅 Linux 镜像安装：这两个包在 Windows 无法编译
+mysqlclient==2.3.0
+uwsgi==2.0.31
