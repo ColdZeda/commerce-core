@@ -57,7 +57,7 @@ Docker Hub 在本机直连不通（`registry-1.docker.io:443` 连接超时），
 mysql:8.0.43              sha256:3e646bcda0d9448ffa3d2024eef04e1bca95528ec19b9e8b76749da9d97d4a10
 redis:7.4.2               sha256:fbdbaea47b9ae4ecc2082ecdb4e1cea81e32176ffb1dcf643d422ad07427e5d9
 python:3.12-slim-bookworm sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
-commerce-core-api:s0      149 MB（builder + runtime 两阶段）
+commerce-core-api:s0      约 323 MB（含 python:3.12-slim 基础层，docker images 统计）
 uwsgi==2.0.31  mysqlclient==2.3.0
 ```
 
@@ -164,7 +164,8 @@ python scripts/check_lock.py <repro-venv>/python → lock=19 installed=19，一�
 ```
 
 主 venv 同样 `lock=19 installed=19`。`backend/scripts/check_lock.py` 已接进 CI，换机器重装若解析到
-不同版本会直接红。
+不同版本会直接红。带环境标记的条目按当前解释器求值（`colorama` 只在 Windows 装），模拟 Linux 求值时
+lock 为 18 条、不含 colorama，两侧都不会误报。
 
 ### E9 门槛 6：没有业务代码抢跑
 

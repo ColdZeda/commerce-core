@@ -1,19 +1,30 @@
-"""比较 lock 文件与实际安装（pip freeze）是否一致，用于依赖锁定门槛。"""
+"""比较 lock 文件与实际安装（pip freeze）是否一致，用于依赖锁定门槛。
+
+带环境标记的条目按当前解释器求值：Windows 装 colorama、Linux 不装，两边都不该报不一致。
+"""
 
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+from packaging.requirements import Requirement
+
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;]+)", re.IGNORECASE)
 
 
-def parse_lock(paths: list[Path]) -> dict[str, str]:
+def parse_lock(paths: list[Path], environment: dict[str, str] | None = None) -> dict[str, str]:
     pins: dict[str, str] = {}
     for path in paths:
         for line in path.read_text(encoding="utf-8").splitlines():
-            match = SPEC.match(line.strip())
+            line = line.strip()
+            if not line or line.startswith("-") or line.startswith("#"):
+                continue
+            requirement = Requirement(line)
+            if requirement.marker is not None and not requirement.marker.evaluate(environment):
+                continue
+            match = SPEC.match(line)
             if match:
                 pins[match.group(1).lower()] = match.group(2)
     return pins

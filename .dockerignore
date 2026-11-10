@@ -1,0 +1,14 @@
+# 镜像只需要 backend/ 与 deploy/uwsgi.ini；其余不进构建上下文。
+.git
+.github
+.venv
+**/.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+.scratch
+.env
+frontend
+node_modules
+docs
