@@ -34,3 +34,7 @@ dist/
 # os
 Thumbs.db
 .DS_Store
+
+# 工具产物
+.acl-recovery/
+backend/staticfiles/

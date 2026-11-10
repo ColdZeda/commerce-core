@@ -1,30 +1,29 @@
 # STATUS
 
-> 更新于 2026-11-10。每轮结束、每阶段结束都更新；滚动覆盖，不追加历史。全文件目标：10 秒读完。
+> 更新于 2026-11-10（S0 收口）。每轮结束、每阶段结束都更新；滚动覆盖，不追加历史。全文件目标：10 秒读完。
 
 ## 现在在哪
 
-S0 骨架已建（目录、AGENTS、plan、phase0、注释检查脚本），**尚未开始编码**。
+S0 已完成，6 项门槛中 5 项有实跑证据（健康检查、Windows 连库、镜像内 uWSGI、依赖锁定、无业务代码）；
+CI 只有本地等价执行，**尚未在 GitHub Actions 上真跑**。证据见 `docs/phases/phase0.md`。
 
 ## 下一步
 
-按 `docs/phases/phase0.md` 执行 S0：
-官方骨架 → MySQL/Redis compose → `/health` → 依赖锁定 → Windows 连库 → Linux 镜像 uWSGI 实测 → CI 初线。
+等用户确认 S0 后进 S1：六表模型与迁移、admin、商品列表/详情、seed、索引与查询检查（含 assertNumQueries）。
 
 ## 卡点
 
-无。
+- GitHub 仓库 `commerce-core` 还没建，`ci.yml` 没被触发过；建仓 push 后要补一条真实 Actions 记录。
+- 服务器侧一切未动（S2 才切换），SSH/ACR/防火墙信息仍缺。
 
 ## 未验证（不许当成已完成）
 
-- GitHub 仓库 `commerce-core` 是否已建、远程 URL、默认分支
+- GitHub Actions 真实运行结果、默认分支保护、tag `s0` 是否已推送
 - 阿里云 ACR 地址、命名空间、凭据提供方式
 - SSH 主机／端口／用户／密钥
-- 本机 Windows／Python 实际版本、`pip freeze`、Docker 镜像与磁盘余量
-- 本机是否已拉 `mysql:8` / `redis:7`，是否需要镜像加速
-- `mysqlclient` 对锁定版本／Python／架构是否有 wheel（用 `pip download --only-binary` 判定）
 - SWAS 当前内存、swap、磁盘、Docker／Compose 版本、容器、端口、防火墙
 - grounded-qa 的实际 compose project、路径、启停命令、数据卷、备份位置
-- PyCharm 版本；WSL2 是否可用
+- 8080 端口是否真空闲；服务器上 1.6GiB 内存是否够 plan §10.3 的初始预算
+- 镜像在 CI 里构建的耗时（本机首次构建约 35 分钟，卡在 apt 下载）
+- WSL2 是否可用（S7 全栈预演要用）
 - 公网 demo 用户的安全初始化方式
-- 8080 端口是否真空闲

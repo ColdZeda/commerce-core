@@ -1,0 +1,100 @@
+name: CI
+
+# S0 只跑 lint + test；build / push / deploy 按 plan §10.4 到 S7 再接。
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: ruff
+        working-directory: backend
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: 注释规范
+        run: python scripts/check_comments.py backend
+
+      - name: 依赖锁定与 pip freeze 一致
+        working-directory: backend
+        run: python scripts/check_lock.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: eslint
+        working-directory: frontend
+        run: npm run lint
+
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.0.43
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-pw
+          MYSQL_DATABASE: commerce
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root-pw --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+      redis:
+        image: redis:7.4.2
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-a-secret
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      # 测试要建 test_commerce，容器里的普通账号没有该权限，CI 用 root
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: commerce
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ci-root-pw
+      MYSQL_TEST_DATABASE: test_commerce
+      REDIS_URL: redis://127.0.0.1:6379/0
+      DB_DRIVER: pymysql
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: pytest
+        working-directory: backend
+        run: pytest -q

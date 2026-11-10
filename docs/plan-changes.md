@@ -18,3 +18,19 @@
 - 否掉重置服务器：双栈切换可逆且更快，重置的每一步都是新故障点。
 - 否掉在 ECS 上构建镜像：1.6GiB 会 OOM，镜像只在 CI 构建。
 - 否掉 C 与 A/B 直接比 p99：操作边界不同，只比同一边界下的扣减耗时。
+
+## D-002 S0 落地时的实现级决定（2026-11-10）
+
+`plan.md` 没写死这些细节，按 `AGENTS.md` §1.3 记录取舍；后续改动同样在此追加。
+
+- **settings 分层**：`backend/config/settings/{base,dev,test,prod}.py`。`manage.py` 默认 dev，`wsgi.py` 默认 prod；本地与镜像共用一套代码，只靠 `DJANGO_SETTINGS_MODULE` 区分。
+- **`.env` 位置**：仓库根 `.env`（已在 `.gitignore`），`base.py` 用 `load_dotenv` 读取且不覆盖已有环境变量。因此 compose 必须在仓库根带 `--env-file .env`；README/AGENTS 里的旧命令缺这个参数会读不到密码。
+- **MySQL 宿主端口 3307**：本机已有 mysqld 占用 3306，容器只绑 `127.0.0.1`。
+- **隔离级别显式 `read committed`**（Django 5.2 对 MySQL 的默认值）。理由：一致性与并发控制靠行锁、唯一索引、条件更新，不靠间隙锁；RC 死锁面更小。代价：同一事务内重复读不是快照一致，校验必须紧贴加锁读写。`AGENTS.md` §6 里"RR 下读到快照"只是注释示例，不构成定案。
+- **驱动分工**：Windows 用 PyMySQL 垫片（`config/__init__.py` 按平台或 `DB_DRIVER` 选择），Linux 镜像用 mysqlclient。镜像装 `requirements-prod.txt`（mysqlclient + uWSGI），Windows 不装这两个编译型包。
+- **版本钉死**：`mysql:8.0.43`、`redis:7.4.2`、`python:3.12-slim-bookworm`、`uwsgi==2.0.31`、`mysqlclient==2.3.0`，不用浮动 tag。
+- **compose 项目名 `commerce`**：容器 `commerce-*` 独占一组，与本机其它 compose 项目互不干扰。
+- **健康检查路径 `/api/v1/health`**：依据 plan §4.1 的 `/api/v1` 基线与 §4.2 表格里的 `/health`。
+- **CI 只用两个 job**：`lint`（ruff、注释检查、eslint）与 `test`（pytest + MySQL/Redis service）。测试库 `test_commerce` 在 CI 用 root 建，本地容器由 `deploy/mysql/init/01-grants.sql` 给应用账号授权。
+- **前端路由**：S0 只放 `/` 自检页，四个业务路由等 S1/S2 按 plan §8 落地。
+

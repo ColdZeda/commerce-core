@@ -31,35 +31,51 @@ flowchart LR
 下单是同步事务：锁 SKU 行 → 扣减 → 核销券 → 写订单与明细快照。
 关单是异步：beat 每分钟扫表，条件更新 + 同事务回补库存与退券。
 
-## 本地运行
+## 本地运行（Windows 开发）
+
+前置：Python 3.12、Node 24、Docker Desktop。容器与数据卷只落在 compose 项目 `commerce` 下，不碰本机其它 compose 项目。
 
 ```bash
-cp .env.example .env
-docker compose -f deploy/docker-compose.yml up -d
-docker compose run --rm api python manage.py migrate
-docker compose run --rm api python manage.py seed_demo
+cp .env.example .env    # 填 DJANGO_SECRET_KEY 与 MYSQL_*，密码自己生成
+docker compose -f deploy/docker-compose.yml --env-file .env up -d mysql redis
+docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py migrate
+docker compose -f deploy/docker-compose.yml --env-file .env up -d api
 ```
 
-前端：`cd frontend && npm install && npm run dev`（Vite 把 `/api` 代理到后端）。
+后端也可以直接在本机跑（Windows 走 PyMySQL，不需要编译 mysqlclient）：
+
+```bash
+cd backend
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+.venv\Scripts\python manage.py migrate
+.venv\Scripts\python manage.py runserver 8000
+```
+
+健康检查：`http://127.0.0.1:8000/api/v1/health` 返回 `{"status":"ok","db":true,"redis":true}`；任一依赖不可用返回 503。
+
+前端：`cd frontend && npm install && npm run dev`（Vite 把 `/api` 代理到 `127.0.0.1:8000`）。
 
 ## 测试
 
 ```bash
-pytest -q
-pytest -q -m concurrency      # 并发用例，需要真实 MySQL
-python scripts/check_comments.py
+cd backend
+pytest -q                        # 接口与探针契约，需要容器里的 MySQL/Redis 在跑
+pytest -q -m concurrency         # S4 起：真实 MySQL 并发用例
+python scripts/check_comments.py backend   # 注释规范，见 AGENTS.md §6
 ```
+
+CI 只跑 lint + test（`.github/workflows/ci.yml`）；build / push / deploy 按 plan §10.4 到 S7 再接。
 
 ## 目录
 
 ```
-backend/       Django 应用
-frontend/      Vue 3 SPA（4 个路由）
-deploy/        compose、nginx、uWSGI、Dockerfile
-experiments/   Redis 预扣实验，不接默认下单链路
+backend/       Django 应用（config/settings 分层、health 探针、tests）
+frontend/      Vue 3 SPA（S0 只有自检页，四个业务路由在 S1/S2 落地）
+deploy/        compose、Dockerfile、uWSGI
+experiments/   Redis 预扣实验，不接默认下单链路（S4）
 scripts/       检查脚本
 docs/          计划、修订记录、阶段记录
-tests/         测试
 ```
 
 ## 非目标

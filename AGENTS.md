@@ -47,36 +47,39 @@
 
 24. 违反 §6 视为**未完成**，不进验收。
 
-## §2 常用命令（S0 落地后按实测修正）
+## §2 常用命令（S0 实测后修正，2026-11-10）
 
 ```bash
-# 依赖与环境
+# 依赖与环境（Windows 开发机；Linux 镜像用 requirements-prod.txt）
+cd backend && py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+
+# 本地栈（仓库根执行；.env 在仓库根，所以要带 --env-file）
+docker compose -f deploy/docker-compose.yml --env-file .env up -d
+docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py migrate
+
+# 检查
 cd backend && pytest -q
-ruff check .
-
-# 本地栈
-docker compose -f deploy/docker-compose.yml up -d
-docker compose run --rm api python manage.py migrate
-
-# 注释检查
-python scripts/check_comments.py
+cd backend && ruff check . && ruff format --check .
+python scripts/check_comments.py backend
+cd frontend && npm run lint
 ```
 
 ## §3 当前阶段
 
 看 `STATUS.md`。阶段记录在 `docs/phases/phaseN.md`，编号与 `docs/plan.md` §11 的阶段号一一对应。
 
-## §4 代码地图（目录级；S0 落地后更新）
+## §4 代码地图（目录级；S0 已建骨架）
 
 ```
 repo/
-├─ backend/      Django 5 + DRF 应用（app 按领域分：catalog / promotion / trade，具体以 S1 为准）
-├─ frontend/     Vue 3 + Vite SPA（4 个路由）
-├─ deploy/       docker-compose、nginx.conf、uwsgi.ini、Dockerfile
-├─ experiments/  C 方案（Redis 预扣）独立实验，不接默认下单链路
-├─ scripts/      CI 检查脚本
+├─ backend/      Django 5 + DRF：config/settings 分层、health 探针、tests/、scripts/db_smoke.py
+├─ frontend/     Vue 3 + Vite SPA（S0 只有 / 自检页，四个路由 S1/S2 落地）
+├─ deploy/       docker-compose.yml、Dockerfile、uwsgi.ini、mysql/init
+├─ experiments/  C 方案（Redis 预扣）独立实验，不接默认下单链路（S4）
+├─ scripts/      CI 检查脚本（check_comments.py）
 ├─ docs/         计划、修订记录、阶段记录
-└─ tests/        测试可按 app 就近组织，不机械分层
+└─ .github/      CI：lint + test
 ```
 
 不确定改哪个文件时先读这里；这里只写到目录级，细到文件的清单一定会过期，**过期的地图比没有更糟**。
