@@ -14,6 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;]+)", re.IGNORECASE)
 
 
+def normalize(name: str) -> str:
+    """PEP 503 归一化：pip freeze 会把 - 写成 _，两边要对齐才能比。"""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
 def parse_lock(paths: list[Path], environment: dict[str, str] | None = None) -> dict[str, str]:
     pins: dict[str, str] = {}
     for path in paths:
@@ -26,7 +31,7 @@ def parse_lock(paths: list[Path], environment: dict[str, str] | None = None) -> 
                 continue
             match = SPEC.match(line)
             if match:
-                pins[match.group(1).lower()] = match.group(2)
+                pins[normalize(match.group(1))] = match.group(2)
     return pins
 
 
@@ -38,7 +43,7 @@ def freeze(python: Path) -> dict[str, str]:
     for line in output.splitlines():
         match = SPEC.match(line.strip())
         if match:
-            pins[match.group(1).lower()] = match.group(2)
+            pins[normalize(match.group(1))] = match.group(2)
     return pins
 
 

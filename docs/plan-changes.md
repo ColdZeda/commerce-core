@@ -50,4 +50,14 @@
   避免新增 app 时忘记加路径。
 - **共享基类**：`common/models.TimeStampedModel` 只放 `created_at/updated_at`，不引入更多抽象。
 
+## D-004 S2 前调整的两处（2026-11-10）
+
+- **不再"切回 grounded-qa"**。plan §10.2 与 §11 的 S2 门槛写的是"停 commerce → 切回 grounded 并验证恢复"。
+  用户 2026-11-10 明确 grounded-qa 已停用，只需要它让出 8080：**停一次，不再启回**，数据卷保留。
+  影响：S2 门槛的"切回并验证"改为"停 grounded → 起 commerce → 外网可达 → 记内存"；
+  C4 的失败分支相应变成"commerce 起不来就先停下，别把 8080 空着"，不再自动拉 grounded。
+- **顶层工作区文档归位**：`E:\projects\readme.md` 补上服务器共用说明与切换命令；服务器事实与操作流水
+  分别落到 `ops/runbook.md`（稳定事实）与 `ops/server-log.md`（只追加的流水）。两者不在 Git 仓库内。
+
+
 

@@ -20,10 +20,13 @@ def api_exception_handler(exc, context):
 
     data = response.data
     detail = data.get("detail") if isinstance(data, dict) else None
-    payload = {
-        "code": CODE_BY_STATUS.get(response.status_code, "ERROR"),
-        "message": str(detail) if detail is not None else "请求参数不合法",
-    }
+    code = CODE_BY_STATUS.get(response.status_code, "ERROR")
+    # 业务码统一大写，DRF 内建 code（authentication_failed 之类）保持小写，据此区分。
+    codes = exc.get_codes() if hasattr(exc, "get_codes") else None
+    if isinstance(codes, str) and codes.isupper():
+        code = codes
+
+    payload = {"code": code, "message": str(detail) if detail is not None else "请求参数不合法"}
     # 字段级错误保留原结构，前端按字段渲染表单提示。
     if detail is None:
         payload["detail"] = data
