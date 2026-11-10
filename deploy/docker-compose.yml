@@ -1,0 +1,81 @@
+name: commerce
+
+services:
+  mysql:
+    image: mysql:8.0.43
+    container_name: commerce-mysql
+    restart: unless-stopped
+    command:
+      - --innodb-lock-wait-timeout=10
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+      - --max-connections=50
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD 未设置}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-commerce}
+      MYSQL_USER: ${MYSQL_USER:-commerce}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD 未设置}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  redis:
+    image: redis:7.4.2
+    container_name: commerce-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: commerce-core-api:s0
+    container_name: commerce-api
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DB_DRIVER: mysqlclient
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health').status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  mysql-data:
