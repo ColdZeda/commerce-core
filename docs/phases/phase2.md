@@ -138,4 +138,5 @@ docker compose ps            → commerce-api/mysql/redis 均 healthy，commerce
    补 `docker compose run --rm api python manage.py migrate` + `seed_demo` 后恢复；部署流程里必须带迁移。
 
 grounded-qa 主栈已按计划停掉（`down` 不带 `-v`，卷保留）；它的 `gq-feishu` 属于另一份 compose，
-按"只操作本项目栈"的红线未处置。
+当时按"只操作本项目栈"的红线未处置，**同日 23:44 经用户批准 `docker stop gq-feishu` 停掉**
+（`restart=on-failure`，不会自己起回来）。服务器上现在只剩 commerce 的 4 个容器，可用内存 871 MB。
