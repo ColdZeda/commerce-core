@@ -4,9 +4,10 @@
 
 ## 现在在哪
 
-**S0 完成并已推送**：`github.com/ColdZeda/commerce-core`，`main` 已推到远程，CI 首次运行即绿
-（run #1，46s，lint + test 全过），收口提交打了 annotated tag `s0`。
-证据见 `docs/phases/phase0.md`（E1–E12）。
+**S0 完成并已推送**：主仓库 `github.com/ColdZeda/commerce-core`，国内镜像 `gitee.com/ColdZeda/commerce-core`，
+两端 `main` 与 annotated tag `s0` 同步（tag 指向 S0 收口提交 `3c467c0`）。GitHub CI 每次 push 都绿
+（run #1–#4，46–48 秒，lint + test 全过）。证据见 `docs/phases/phase0.md`（E1–E12）。
+推 GitHub 要带本机代理，推 Gitee 直连，命令见 `AGENTS.md` §2。
 
 ## 下一步
 
