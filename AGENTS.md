@@ -65,6 +65,10 @@ python scripts/check_comments.py backend
 cd frontend && npm run lint
 ```
 
+> 网络：本机代理在 `127.0.0.1:10808`（浏览器走系统代理，git 默认直连，所以连 GitHub 会间歇失败）。
+> 推 GitHub 时用一次性参数，不改全局配置：`git -c http.proxy=http://127.0.0.1:10808 push origin main`。
+> Gitee 是国内直连，不要带代理。连不上先让用户确认代理已开，不要反复重试。
+
 ## §3 当前阶段
 
 看 `STATUS.md`。阶段记录在 `docs/phases/phaseN.md`，编号与 `docs/plan.md` §11 的阶段号一一对应。
