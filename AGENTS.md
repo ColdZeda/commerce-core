@@ -73,12 +73,20 @@ cd frontend && npm run lint
 
 看 `STATUS.md`。阶段记录在 `docs/phases/phaseN.md`，编号与 `docs/plan.md` §11 的阶段号一一对应。
 
-## §4 代码地图（目录级；S0 已建骨架）
+## §4 代码地图（目录级；S1 后更新）
 
 ```
 repo/
-├─ backend/      Django 5 + DRF：config/settings 分层、health 探针、tests/、scripts/db_smoke.py
-├─ frontend/     Vue 3 + Vite SPA（S0 只有 / 自检页，四个路由 S1/S2 落地）
+├─ backend/
+│  ├─ config/    settings 分层、URL 根表、分页、异常收口
+│  ├─ catalog/   商品与 SKU：模型、列表/详情接口、admin、seed_demo、tests
+│  ├─ promotion/ 券与用户券的模型（接口在 S2）
+│  ├─ trade/     订单与明细的模型（接口在 S3）
+│  ├─ health/    就绪探针
+│  ├─ common/    抽象模型（时间戳）
+│  ├─ tests/     跨 app 测试
+│  └─ scripts/   db_smoke、check_lock
+├─ frontend/     Vue 3 + Vite SPA（S0 只有 / 自检页，四个业务路由 S3 落地）
 ├─ deploy/       docker-compose.yml、Dockerfile、uwsgi.ini、mysql/init
 ├─ experiments/  C 方案（Redis 预扣）独立实验，不接默认下单链路（S4）
 ├─ scripts/      CI 检查脚本（check_comments.py）

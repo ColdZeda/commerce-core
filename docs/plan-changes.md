@@ -34,3 +34,20 @@
 - **CI 只用两个 job**：`lint`（ruff、注释检查、eslint）与 `test`（pytest + MySQL/Redis service）。测试库 `test_commerce` 在 CI 用 root 建，本地容器由 `deploy/mysql/init/01-grants.sql` 给应用账号授权。
 - **前端路由**：S0 只放 `/` 自检页，四个业务路由等 S1/S2 按 plan §8 落地。
 
+## D-003 S1 的实现级取舍（2026-11-10）
+
+- **错误体**：`config/exceptions.py` 一处收口，`{code,message,detail?}`，status→code 走固定映射表；
+  字段级校验错误保留原始 `detail` 结构，前端按字段渲染。业务码（如 `STOCK_NOT_ENOUGH`）到 S3 再按需加。
+- **分页**：`config/pagination.py` 统一 10 / 上限 50，参数名 `page`、`page_size`，与 plan §4.1 一致。
+- **排序白名单**：只放 `created_at`、`price` 两个字段及各自方向；`price` 排的是**最低在售价**，
+  白名单外直接 400，不做静默回退。
+- **可见性**：列表与详情都只暴露 `is_active=True` 的商品，详情只带在售 SKU；下架商品访问详情返回 404。
+  这样前端不需要判断"下架但可见"的中间态。
+- **`order` 表名**：MySQL 保留字，但 plan §3.2 已定案，照用；Django 会给标识符加反引号，
+  ORM 与迁移都不受影响，**手写 SQL / 外部工具必须自己转义**。
+- **`seed_demo` 幂等**：`get_or_create` 只补缺，不覆盖已存在的价格与库存，避免重跑把演示改价重置。
+- **测试位置**：按 app 就近放（`catalog/tests/`），`pytest` 的 `testpaths` 改为收集整个 `backend/`，
+  避免新增 app 时忘记加路径。
+- **共享基类**：`common/models.TimeStampedModel` 只放 `created_at/updated_at`，不引入更多抽象。
+
+

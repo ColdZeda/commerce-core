@@ -41,6 +41,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "health",
+    "catalog",
+    "promotion",
+    "trade",
 ]
 
 MIDDLEWARE = [
@@ -114,6 +117,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
     "DATETIME_FORMAT": "iso-8601",
 }
 

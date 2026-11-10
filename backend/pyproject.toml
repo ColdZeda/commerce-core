@@ -14,6 +14,11 @@ ignore = ["B008"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
-testpaths = ["tests"]
+testpaths = ["."]
+norecursedirs = [".venv", "migrations", "staticfiles", "node_modules", "build", "dist", ".*"]
 addopts = "-q --strict-markers"
 markers = ["concurrency: 需要真实 MySQL 的并发用例"]
+# Django 6.0 会把 URLField 表单默认 scheme 改成 https；升级时再处理，先不刷屏。
+filterwarnings = [
+    "ignore:The default scheme will be changed from 'http' to 'https' in Django 6.0:DeprecationWarning",
+]
