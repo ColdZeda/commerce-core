@@ -1,9 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import HomeView from '../views/HomeView.vue'
+import LoginView from '../views/LoginView.vue'
+import ProductsView from '../views/ProductsView.vue'
 
-// S0 只放自检页；四个业务路由按 plan §8 在 S1/S2 落地，避免提前定契约。
-const routes = [{ path: '/', name: 'home', component: HomeView }]
+// 商品列表与详情、订单页在 S3 补齐；这里只放 S2 需要的两个入口。
+const routes = [
+  { path: '/', redirect: '/products' },
+  { path: '/login', name: 'login', component: LoginView },
+  { path: '/products', name: 'products', component: ProductsView },
+  { path: '/:pathMatch(.*)*', redirect: '/products' },
+]
 
 export default createRouter({
   history: createWebHistory(),

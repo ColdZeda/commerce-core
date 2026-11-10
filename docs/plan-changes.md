@@ -59,5 +59,18 @@
 - **顶层工作区文档归位**：`E:\projects\readme.md` 补上服务器共用说明与切换命令；服务器事实与操作流水
   分别落到 `ops/runbook.md`（稳定事实）与 `ops/server-log.md`（只追加的流水）。两者不在 Git 仓库内。
 
+## D-005 S2 前端与镜像引导方式（2026-11-10）
+
+- **S2 上服务器的镜像从本机构建**。AGENTS 只禁止"在服务器上构建"（1.6 GiB 会 OOM），而 CI 的 build/push
+  按 C7 要到 S7 才接。所以 S2 用：本机 `docker build` → `docker push` 到 ACR `commerce-core/api:<tag>` →
+  服务器 `docker compose pull`。每次手工推的 tag 记在 `ops/server-log.md`，S7 起由 CI 取代。
+- **access 有效期做成可配**：`JWT_ACCESS_MINUTES`（默认 15）。S2 验证 401 单飞时临时设成 0.05 分钟，
+  这不是测试专用开关，生产也允许调。
+- **前端目录**：`src/api/{client,auth,catalog,coupons}.js`、`src/stores/auth.js`、`src/views/{LoginView,ProductsView}.vue`。
+  axios 与 store 之间用 `configureAuth()` 注入回调，避免循环依赖。
+- **路由**：目前只有 `/` → `/products`、`/login`、`/products`，未匹配路径一律回商品页；
+  商品详情页与订单页按 plan §8 在 S3 一起做。
+
+
 
 

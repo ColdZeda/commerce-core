@@ -9,8 +9,132 @@ body {
   min-height: 100vh;
 }
 
+a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 18px;
+  color: #111827;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-name {
+  color: #4b5563;
+}
+
 .page {
-  max-width: 720px;
+  max-width: 1080px;
   margin: 0 auto;
+  padding: 24px;
+}
+
+.coupons h2,
+.catalog h2 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+
+.coupon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.coupon-card {
+  display: flex;
+}
+
+.coupon-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.coupon-threshold,
+.coupon-left {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.catalog-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.catalog-toolbar h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.catalog-search {
+  width: 220px;
+}
+
+.catalog-order {
+  width: 160px;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.product-card h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.product-subtitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #6b7280;
+  min-height: 18px;
+}
+
+.product-price {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.catalog-pagination {
+  margin-top: 24px;
+}
+
+.auth-page {
+  display: flex;
+  justify-content: center;
   padding: 64px 24px;
+}
+
+.auth-card {
+  width: 360px;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
 }

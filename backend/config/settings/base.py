@@ -125,7 +125,8 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    # access 短、refresh 长：前端靠 401 单飞刷新，不把有效期当唯一手段。
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=float(env("JWT_ACCESS_MINUTES", "15"))),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": False,
     "ALGORITHM": "HS256",

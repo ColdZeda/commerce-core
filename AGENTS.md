@@ -79,14 +79,16 @@ cd frontend && npm run lint
 repo/
 ├─ backend/
 │  ├─ config/    settings 分层、URL 根表、分页、异常收口
+│  ├─ accounts/  登录/刷新/me，Bearer 认证与 token 错误分类
 │  ├─ catalog/   商品与 SKU：模型、列表/详情接口、admin、seed_demo、tests
-│  ├─ promotion/ 券与用户券的模型（接口在 S2）
+│  ├─ promotion/ 券与用户券：模型、列表/领取/我的券、领券 service、并发测试
 │  ├─ trade/     订单与明细的模型（接口在 S3）
 │  ├─ health/    就绪探针
-│  ├─ common/    抽象模型（时间戳）
+│  ├─ common/    抽象模型（时间戳）与业务错误类型
 │  ├─ tests/     跨 app 测试
 │  └─ scripts/   db_smoke、check_lock
-├─ frontend/     Vue 3 + Vite SPA（S0 只有 / 自检页，四个业务路由 S3 落地）
+├─ frontend/     Vue 3 + Vite SPA：/login、/products（含领券入口）、api 层与 auth store；
+│                商品详情与订单页在 S3
 ├─ deploy/       docker-compose.yml、Dockerfile、uwsgi.ini、mysql/init
 ├─ experiments/  C 方案（Redis 预扣）独立实验，不接默认下单链路（S4）
 ├─ scripts/      CI 检查脚本（check_comments.py）
