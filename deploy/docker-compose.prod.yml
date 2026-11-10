@@ -1,11 +1,12 @@
 name: commerce
 
 # 服务器上跑的最小栈：mysql + redis + api + nginx。
-# 镜像不在服务器构建（1.6 GiB 会 OOM），由 CI（S7 起）或本机手工推 ACR 后 pull。
+# 镜像不在服务器构建（1.6 GiB 会 OOM）。所有镜像（含 mysql/redis/nginx 基础镜像）都从 ACR 拉：
+# 服务器上的 Docker Hub 加速器对部分 tag 返回 not found，走 ACR 同地域内网更快也更稳。
 
 services:
   mysql:
-    image: mysql:8.0.43
+    image: ${ACR_REGISTRY}/commerce-core/mysql:8.0.43
     container_name: commerce-mysql
     restart: unless-stopped
     command:
@@ -28,7 +29,7 @@ services:
       start_period: 40s
 
   redis:
-    image: redis:7.4.2
+    image: ${ACR_REGISTRY}/commerce-core/redis:7.4.2
     container_name: commerce-redis
     restart: unless-stopped
     command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
@@ -66,7 +67,7 @@ services:
       start_period: 20s
 
   nginx:
-    image: nginx:stable
+    image: ${ACR_REGISTRY}/commerce-core/nginx:stable
     container_name: commerce-nginx
     restart: unless-stopped
     ports:
