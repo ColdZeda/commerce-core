@@ -100,7 +100,7 @@ repo/
 
 ```
 ├─ repo/     正式 Git 仓库，即上面这棵树
-├─ ops/      runbook.md（这台机器的事实与固定操作）、server-log.md（每次服务器操作流水，仅做追加写入不做修改）
+├─ ops/      runbook.md（这台机器的事实与固定操作）、server-log.md（每次服务器操作流水，仅做追加写入不做修改）、server.env（服务器 .env 的本地模板，填完上传，不进 Git）
 ├─ archive/  只读冻结件，永不修改、永不删除（§1.12）
 └─ assets/   截图等素材
 ```
