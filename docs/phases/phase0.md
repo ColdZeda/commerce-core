@@ -32,12 +32,12 @@
 - [x] `docker compose up` 后 `/api/v1/health` 返回 200，`db` 与 `redis` 均为 `true`
 - [x] Windows 本机能连上容器里的 MySQL 8（插入一条记录并读回）
 - [x] Linux 镜像里 uWSGI 起得来，能返回 Django 响应
-- [x] CI 初线：lint + test（不含 build / push / deploy）—— 本地等价执行全绿；Actions 实跑待用户建远程仓库后补，见 E7
+- [x] CI 绿（lint + test）—— 远程仓库首次 push 即通过，见 E7
 - [x] 依赖版本锁定且可复现（换目录重装一次仍能跑）
 - [x] 没有任何业务代码抢跑
 
-> 唯一未闭环项：门槛 4 的"CI 绿"只有本地等价证据。GitHub 仓库由用户创建，本阶段不擅自 push；
-> 建仓并推送后需补一条真实 Actions 运行记录，这一项才算交付。
+> 6 项门槛全部闭环：前 5 项有本机实跑记录，第 4 项有 GitHub Actions 真实运行记录
+> （run #1，46 秒，lint 与 test 两个 job 全绿）。
 
 ## 证据
 
@@ -135,24 +135,35 @@ curl http://127.0.0.1:8000/api/v1/health → 200 {"status":"ok","db":true,"redis
 
 用的是 `uwsgi --ini /app/deploy/uwsgi.ini`，**不是 runserver**；`harakiri=30` 与 C3 链一致。
 
-### E7 门槛 4：CI 绿 —— 本地等价执行全绿，Actions 实跑待仓库
+### E7 门槛 4：CI 绿（GitHub Actions 实跑）
 
 工作流 `.github/workflows/ci.yml` 只有两个 job：`lint`（ruff、`check_comments.py`、`check_lock.py`、eslint）
 与 `test`（pytest + MySQL/Redis service），不含 build / push / deploy（C7）。
 
-本地逐条执行同一批命令：
+远程仓库首次推送（`5996da4`）即触发，**一次通过**：
+
+```text
+run #1  CI  push  main  completed/success  46s
+https://github.com/ColdZeda/commerce-core/actions/runs/42809676008
+  lint  success  11:42:43Z → 11:43:06Z（23s）
+    Install backend deps / ruff / 注释规范 / 依赖锁定与 pip freeze 一致 / eslint  全 green
+  test  success  11:42:43Z → 11:43:25Z（42s）
+    Initialize containers（mysql:8.0.43 + redis:7.4.2）/ pytest                 全 green
+```
+
+同一批命令在本机也跑过（Windows，PyMySQL 链路）：
 
 ```text
 ruff check .                → All checks passed!
 ruff format --check .       → 17 files already formatted
 python scripts/check_lock.py        → lock=19 installed=19，一致
-python scripts/check_comments.py backend → 注释行 5 / 代码行 248，占比 2.0%，OK
+python scripts/check_comments.py backend → 注释行 5 / 代码行 255，占比 1.9%，OK
 cd frontend && npm run lint → 0 error 0 warning
 cd backend && pytest -q     → 3 passed
 ```
 
-**未完成部分**：远程仓库还没建，`on: push` 尚未真正触发过。建仓并 push 后需补一条真实 Actions 运行记录，
-在那之前"CI 绿"只能算本地等价证据，`STATUS.md` 的未验证区保留这一条。
+`check_lock.py` 的 `colorama` 条目带 `sys_platform == "win32"` 标记，Linux 侧求值后自动跳过；
+CI 第一次跑就验证了这个分支没误报。
 
 ### E8 门槛 5：依赖锁定可复现
 
@@ -189,3 +200,15 @@ plan §10.3 的内存预算是**服务器**目标值，这里只是本机开发�
 - commit 前缀：`feat` / `fix` / `chore` / `docs` / `test`，冒号后写一句中文结论。
 - 每个阶段收口打 annotated tag `sN`（S0 → `s0`），tag 指向收口提交；发布点另用 `vX.Y.Z`。
 - 首个提交是骨架（`a5d1b10`），S0 收口提交由 `git tag s0` 标记，不在文档里写死 hash。
+
+### E12 远程仓库与首次推送
+
+```text
+origin  https://github.com/ColdZeda/commerce-core.git
+main    首次 push → origin/main（5996da4，触发 CI run #1）
+s0      annotated tag，指向 S0 收口提交
+LICENSE MIT，Copyright (c) 2026 ColdZeda（本地加，未用 GitHub 建仓时的 license 选项）
+```
+
+仓库由用户本人在 GitHub 创建（Public，未勾 README / .gitignore / license），执行 agent 只做
+`git remote add` 与 push，没有创建远程仓库、没有改仓库设置（AGENTS §1.8）。
