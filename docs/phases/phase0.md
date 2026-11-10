@@ -32,9 +32,12 @@
 - [x] `docker compose up` 后 `/api/v1/health` 返回 200，`db` 与 `redis` 均为 `true`
 - [x] Windows 本机能连上容器里的 MySQL 8（插入一条记录并读回）
 - [x] Linux 镜像里 uWSGI 起得来，能返回 Django 响应
-- [x] CI 绿（lint + test）—— 本地等价执行全绿；Actions 实跑待用户建远程仓库后补，见 E7
+- [x] CI 初线：lint + test（不含 build / push / deploy）—— 本地等价执行全绿；Actions 实跑待用户建远程仓库后补，见 E7
 - [x] 依赖版本锁定且可复现（换目录重装一次仍能跑）
 - [x] 没有任何业务代码抢跑
+
+> 唯一未闭环项：门槛 4 的"CI 绿"只有本地等价证据。GitHub 仓库由用户创建，本阶段不擅自 push；
+> 建仓并推送后需补一条真实 Actions 运行记录，这一项才算交付。
 
 ## 证据
 

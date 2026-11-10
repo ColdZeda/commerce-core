@@ -4,8 +4,9 @@
 
 ## 现在在哪
 
-S0 已完成，6 项门槛中 5 项有实跑证据（健康检查、Windows 连库、镜像内 uWSGI、依赖锁定、无业务代码）；
-CI 只有本地等价执行，**尚未在 GitHub Actions 上真跑**。证据见 `docs/phases/phase0.md`。
+S0 实现完成：骨架、compose、`/api/v1/health`、依赖锁定、镜像内 uWSGI 都已实跑验证；
+6 项门槛里 5 项有实跑证据，**只剩"CI 绿"没有真实 Actions 运行记录**（远程仓库还没建）。
+证据见 `docs/phases/phase0.md`，收口提交打了 tag `s0`。
 
 ## 下一步
 
