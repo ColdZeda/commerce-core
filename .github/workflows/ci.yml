@@ -1,9 +1,14 @@
 name: CI
 
-# S0 只跑 lint + test；build / push / deploy 按 plan §10.4 到 S7 再接。
+# push / PR 跑 lint + test；main 上两个都绿了才构建并推镜像到 ACR。
+# 部署（ssh → migrate → up -d）在 S7b 接，见 docs/phases/phase7.md。
 on:
   push:
   pull_request:
+
+env:
+  # 仓库地址不是凭据；用户名/密码走 GitHub Secrets
+  ACR_REGISTRY: crpi-3tubdvd6wrolewii.cn-shenzhen.personal.cr.aliyuncs.com
 
 jobs:
   lint:
@@ -98,3 +103,55 @@ jobs:
       - name: pytest
         working-directory: backend
         run: pytest -q
+
+  # 镜像只在 CI 构建（服务器 1.6 GiB 会 OOM）。tag 用 commit sha 前 7 位，与服务器 .current_tag 对齐。
+  images:
+    name: build & push
+    runs-on: ubuntu-24.04
+    needs: [lint, test]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 取 sha tag
+        id: tag
+        run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 登录 ACR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: api
+        id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ env.ACR_REGISTRY }}/commerce-core/api:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: web
+        id: web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.web
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ env.ACR_REGISTRY }}/commerce-core/web:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: 摘要
+        run: |
+          echo "sha: ${{ steps.tag.outputs.sha }}"
+          echo "api: ${{ steps.api.outputs.digest }}"
+          echo "web: ${{ steps.web.outputs.digest }}"

@@ -1,4 +1,4 @@
-# 镜像只需要 backend/ 与 deploy/uwsgi.ini；其余不进构建上下文。
+# 两个镜像共用一个构建上下文：api 只用 backend/，web 只用 frontend/。
 .git
 .github
 .venv
@@ -9,6 +9,9 @@
 .ruff_cache
 .scratch
 .env
-frontend
-node_modules
+.env.*
 docs
+**/node_modules
+frontend/dist
+frontend/.vite
+backend/staticfiles

@@ -1,0 +1,17 @@
+# 前端静态产物镜像：node 里构建，nginx 里托管。
+# 服务器不许构建（AGENTS §1.7），所以 dist 与 nginx 配置都进了镜像；改配置就得重建镜像，和改代码一样走 CI。
+FROM node:24-bookworm-slim AS build
+
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+
+FROM nginx:stable
+
+COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /src/dist /usr/share/nginx/html
+
+EXPOSE 80

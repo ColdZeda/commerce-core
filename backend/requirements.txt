@@ -11,6 +11,8 @@ redis==8.1.0
 # 异步关单（S5）：Celery + Redis 作 broker；不启用 result backend，也不装 celery-beat 的 DB scheduler
 celery==5.7.0
 kombu==5.7.0
+# kombu 的 redis transport 直接 import packaging.version，但它没有把这个包写进依赖
+packaging==26.3
 amqp==5.4.2
 billiard==4.3.2
 vine==5.1.0

@@ -1,8 +1,22 @@
 name: commerce
 
-# 服务器上跑的最小栈：mysql + redis + api + nginx。
-# 镜像不在服务器构建（1.6 GiB 会 OOM）。所有镜像（含 mysql/redis/nginx 基础镜像）都从 ACR 拉：
+# 服务器上跑的最小栈：mysql + redis + api + web + worker + beat。
+# 镜像不在服务器构建（1.6 GiB 会 OOM）。所有镜像（含 mysql/redis 基础镜像）都从 ACR 拉：
 # 服务器上的 Docker Hub 加速器对部分 tag 返回 not found，走 ACR 同地域内网更快也更稳。
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# api / worker / beat 是同一个镜像，只有命令和环境指向不同
+x-app-env: &app-env
+  DJANGO_SETTINGS_MODULE: config.settings.prod
+  DB_DRIVER: mysqlclient
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  REDIS_URL: redis://redis:6379/0
 
 services:
   mysql:
@@ -27,6 +41,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 40s
+    logging: *logging
 
   redis:
     image: ${ACR_REGISTRY}/commerce-core/redis:7.4.2
@@ -38,18 +53,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    logging: *logging
 
   api:
     image: ${ACR_REGISTRY}/commerce-core/api:${IMAGE_TAG}
     container_name: commerce-api
     restart: unless-stopped
     env_file: .env
-    environment:
-      DJANGO_SETTINGS_MODULE: config.settings.prod
-      DB_DRIVER: mysqlclient
-      MYSQL_HOST: mysql
-      MYSQL_PORT: "3306"
-      REDIS_URL: redis://redis:6379/0
+    environment: *app-env
     depends_on:
       mysql:
         condition: service_healthy
@@ -65,18 +76,60 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging: *logging
 
-  nginx:
-    image: ${ACR_REGISTRY}/commerce-core/nginx:stable
-    container_name: commerce-nginx
+  # 关单任务的实际执行者。没健康检查：celery inspect 每次都要起一个完整的 Django 进程，
+  # 在 1.6 GiB 的机器上代价太高；存活靠 restart 策略 + 业务验收（过期订单 60 秒内被关）。
+  worker:
+    image: ${ACR_REGISTRY}/commerce-core/api:${IMAGE_TAG}
+    container_name: commerce-worker
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=info
+      - --concurrency=1
+      - --max-tasks-per-child=100
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging: *logging
+
+  # 只依赖 broker：beat 只往 redis 里投递任务，不碰数据库
+  beat:
+    image: ${ACR_REGISTRY}/commerce-core/api:${IMAGE_TAG}
+    container_name: commerce-beat
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    command:
+      - celery
+      - -A
+      - config
+      - beat
+      - --loglevel=info
+      - --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging: *logging
+
+  web:
+    image: ${ACR_REGISTRY}/commerce-core/web:${IMAGE_TAG}
+    container_name: commerce-web
     restart: unless-stopped
     ports:
       - "8080:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       api:
         condition: service_healthy
+    logging: *logging
 
 volumes:
   mysql-data:
