@@ -64,6 +64,11 @@ cd backend && ruff check . && ruff format --check .
 python scripts/check_comments.py backend
 cd frontend && npm run lint
 
+# 生产栈本机预演（docker-compose.prod.yml 与服务器同一份；需要 deploy/.env，模板见 deploy/.env.prod.example）
+# 容器名与本地栈冲突，跑之前先停掉 commerce-api/mysql/redis
+cd deploy && docker compose -f docker-compose.prod.yml up -d
+cd deploy && docker compose -f docker-compose.prod.yml run --rm api python manage.py migrate
+
 # 异步关单（Windows 上 beat 与 worker 必须分两个进程，-B 会被 Celery 拒绝）
 cd backend && .venv\Scripts\celery -A config worker -l info --pool=solo
 cd backend && .venv\Scripts\celery -A config beat -l info
@@ -94,10 +99,11 @@ repo/
 │  └─ scripts/   db_smoke、check_lock
 ├─ frontend/     Vue 3 + Vite SPA：/login、/products、/products/:id（结算）、/orders（详情、我的券、支付、取消）、
 │                api 层、auth store、路由守卫
-├─ deploy/       docker-compose.yml、Dockerfile、uwsgi.ini、mysql/init
+├─ deploy/       docker-compose.yml（本地）、docker-compose.prod.yml（服务器同款）、Dockerfile（api）、
+│                Dockerfile.web（前端静态产物）、nginx/default.conf（静态 + /api 反代 + C1）、uwsgi.ini、mysql/init
 ├─ scripts/      CI 检查脚本（check_comments.py）
 ├─ docs/         计划、修订记录、阶段记录
-└─ .github/      CI：lint + test
+└─ .github/      CI：lint + test + build/push 镜像（main 上推 ACR，sha tag）
 ```
 
 仓库之外（同一工作区 `E:\projects\commerce-core\`，不是 Git 仓库的一部分）：

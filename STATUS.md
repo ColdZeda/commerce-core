@@ -1,60 +1,62 @@
 # STATUS
 
-> 更新于 2026-11-11（S6 收口）。每轮结束、每阶段结束都更新；滚动覆盖，不追加历史。全文件目标：10 秒读完。
+> 更新于 2026-11-11（S7a 收口）。每轮结束、每阶段结束都更新；滚动覆盖，不追加历史。全文件目标：10 秒读完。
 
 ## 现在在哪
 
 **S0–S6 已完成**，业务闭环在本地跑通：登录 → 领券 → 下单 → 取消 / 超时关单 → 模拟支付。
 代码在 `github.com/ColdZeda/commerce-core`（镜像 `gitee.com/ColdZeda/commerce-core`），
-tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`；CI 每次 push 都绿（lint + test）。
+tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`。
 
-**S6 模拟支付**：
+**S7a 已完成（本机与 CI，服务器没动）**：
 
-- `trade/payments.py`：HMAC-SHA256 签 `order_no|trade_no|amount|timestamp`，比较用 `compare_digest`，
-  时间窗 ±300 秒（`PAY_CALLBACK_WINDOW_SECONDS`）
-- `mark_order_paid` 是唯一入口：`/pay`（登录 + `ENABLE_MOCK_PAY`）与 `/payments/callback`（匿名 + HMAC）都走它
-- `rules.py` 三行：`PENDING→CANCELLED`、`PENDING→CLOSED`、`PENDING→PAID`（PAID 无跨表副作用）
-- 已支付幂等：`/pay` 与回调都返回 200（`X-Idempotent-Replay` / `idempotent: true`），`paid_at` 不变
-- 已关闭/已取消的回调返回 409 `ORDER_NOT_PAYABLE`，签名/时间/金额各自独立报错
-- 前端订单页与详情抽屉加了「模拟支付」，浏览器实测可用
+- `deploy/Dockerfile.web`：node 构建 → nginx 运行，dist 与 conf 都打进镜像；`api:local` 360 MB、`web:local` 240 MB
+- `deploy/nginx/default.conf`：`/` 托管 SPA、`/assets/` 30 天 immutable、`index.html` no-store、
+  history fallback、`/api/` 反代、`/admin/` 仍按 C1 返回 404（已用 10.99.0.0/16 网段实测 404）
+- `deploy/docker-compose.prod.yml`：六个 service（mysql/redis/api/web/worker/beat），conf 不再挂载，
+  每个 service 加了 json-file 日志上限（10m×3）
+- `.github/workflows/ci.yml` 加 `images` job：lint+test 全绿后构建 api 与 web，main 上推 ACR（sha tag），PR 上只构建
+- 本机全栈预演 13/13：登录→领券→下单（券减 30）→支付→幂等重放→取消→409 分支→过期订单 **3 秒**被 worker 关掉
 
 **服务器**：`http://120.24.67.82:8080`，4 个容器（api/mysql/redis/nginx）healthy；
-服务器上跑的仍是 **S2 镜像**，S3–S6 的代码都没部署（按 plan 在 S7 一起做）。
+服务器上跑的仍是 **S2 镜像**，S3–S7a 的代码都没部署。
 
-阶段记录：`docs/phases/phase0.md` … `phase6.md`；服务器事实与流水在仓库外
+阶段记录：`docs/phases/phase0.md` … `phase7.md`（S7a 证据已回填）；服务器事实与流水在仓库外
 `..\ops\runbook.md` 与 `..\ops\server-log.md`。
 
 ## 下一步
 
-**S7 部署与 CI/CD**（拆成两段：S7a 本地与 CI 不动服务器，S7b 部署与回滚要确认；计划见 `docs/phases/phase7.md`）：
+**S7b 部署与回滚**（`docs/phases/phase7.md`；全部要先贴命令、等你确认再动服务器）：
 
-- `deploy/docker-compose.prod.yml` 补 worker / beat 两个 service（同一个 api 镜像，不同命令）
-- nginx 托管前端静态资源 + history fallback（现在 `/` 还是一行纯文本）
-- CI 加 build + push 到 ACR（固定 sha tag）、GitHub Secrets、服务器侧部署脚本与回滚演练
-- WSL2/Compose 全栈预演：uWSGI + nginx + worker + beat 跑通完整业务，不只用 runserver
-- 公网验证：登录 → 领券 → 下单 → 取消/关单 → 支付，两条订单分别验证
-- 部署前读 `..\ops\runbook.md`；服务器操作逐条进 `..\ops\server-log.md`
+1. 生成专用部署密钥 → 你把公钥追加到服务器 `~/.ssh/authorized_keys`
+2. 你在 GitHub Secrets 里填 `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY`（私钥不进聊天）
+3. `deploy/deploy.sh` + CI 的 `deploy` job（ssh → 备份 tag → 拉镜像 → `migrate -T` → `up -d` → health → 失败回滚）
+4. 首次部署 → 公网三单验收（取消 / 超时关单 / 支付后取消 409）→ 回滚演练 → `free -m` 与 `docker stats` 实测
 
 ## 卡点
 
-无。
+推 GitHub 要本机代理：今天直连被 reset，带 `127.0.0.1:10808` 时若代理没开会失败。
+Gitee 直连正常。CI 的 build/push 实跑要等 GitHub 推上去才看得到结果。
 
 ## 未验证（不许当成已完成）
 
-- S3–S6 代码还没上服务器：公网仍是 S2 镜像，`/api/v1/orders` 仍是 404
-- 前端静态资源还没部署、没有 WSL2 全栈预演
-- compose 里没有 worker/beat service，所以公网还没有自动关单
-- ACR 的 CI 构建推送、GitHub Secrets、部署与回滚演练（S7）
+- CI 的 `images` job 只做了本地 YAML 校验，**还没在 GitHub Actions 上真跑过**（要等推送成功）
+- S3–S7a 代码还没上服务器：公网仍是 S2 镜像，`/api/v1/orders` 仍是 404
+- 公网部署、三单验收、回滚演练、服务器内存实测（S7b）
+- Django admin 的 `/static/` 没托管：内网能开页面但没有样式；业务验收不依赖 admin
 - 公网 demo 用户的安全初始化方式（S8）
 
 ## 接手提示（新会话读到这里就够）
 
-1. 先读 `AGENTS.md` → 本文件 → 当前阶段文件（`docs/phases/phase7.md` 已写好，从 S7a 开始）
+1. 先读 `AGENTS.md` → 本文件 → 当前阶段文件（`docs/phases/phase7.md`，从 S7b 开始）
 2. 动服务器前读 `..\ops\runbook.md`；每次服务器操作追加到 `..\ops\server-log.md`
 3. 推 GitHub 要带本机代理 `-c http.proxy=http://127.0.0.1:10808`；推 Gitee 直连
 4. 本机开发：`cd backend && .venv\Scripts\python -m pytest -q`；前端 `cd frontend && npm run dev`
    （本地栈的 api 容器占着 8000，跑 `runserver` 前先 `docker stop commerce-api`）
-5. 压测：`cd backend && .venv\Scripts\python -m stocklab.bench`
-6. 异步关单本地演练（Windows 上 beat 与 worker 必须分两个进程）：
+5. 生产栈本机预演：`cd deploy && docker compose -f docker-compose.prod.yml up -d`，
+   需要 `deploy/.env`（模板 `deploy/.env.prod.example`），且要先停下本地栈，容器名会撞
+6. 踩过的坑：只重建 api 不重建 web 会整站 502（nginx 缓存了上游 IP），补 `restart web`；
+   `docker compose run` 在脚本里必须加 `-T`
+7. 异步关单本地演练（Windows 上 beat 与 worker 必须分两个进程）：
    `celery -A config worker -l info --pool=solo` 与 `celery -A config beat -l info`
-7. 模拟支付：dev 默认开；prod 要在 `.env` 里设 `ENABLE_MOCK_PAY=true` 才能点「支付」
+8. 模拟支付：dev 默认开；prod 要在 `.env` 里设 `ENABLE_MOCK_PAY=true` 才能点「支付」

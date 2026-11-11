@@ -16,15 +16,18 @@
 - `deploy/nginx/default.conf` 改造：`/api/` 反代、`/admin/` 仍按 C1 返回 404、`/assets/` 长缓存、
   `index.html` no-store、history fallback 到 `index.html`
 - `deploy/docker-compose.prod.yml`：nginx 服务换成 web 镜像；新增 `worker`、`beat` 两个 service（同一 api 镜像）
-- `.github/workflows/ci.yml`：加 `build`（api + web，sha tag）与 `push`（ACR）；
-  `deploy` job 在 main 上跑（SSH → 迁移 → up → health → 失败回滚）
+- `.github/workflows/ci.yml`：加 `images` job（api + web，sha tag；main 上推 ACR，PR 上只构建不推）
 - 本地全栈预演：用 prod compose 在本机（Docker Desktop，Linux 容器）跑 api/web/mysql/redis/worker/beat，
   走一遍登录→领券→下单→支付→关单；WSL2 的 Ubuntu 里再验一次 nginx 静态与 history fallback
 - `deploy/.env.prod.example` 补键；`ops/runbook.md` 补部署与回滚固定操作
 
+> `deploy` job 放到 S7b：它需要三个 Secret 和一个已追加公钥的服务器，没有这些就只能写一段没人跑过的 YAML。
+> S7a 结束时 CI 只做到"构建 + 推镜像"。
+
 ### S7b 部署与回滚（先贴命令、等用户确认再执行）
 
 - 建部署密钥（专用，不用日常私钥）→ 公钥进服务器 → 三个 GitHub Secrets
+- `deploy/deploy.sh`（服务器侧：备份 tag → 拉镜像 → 迁移 → 起栈 → 健康检查 → 失败回滚）与 CI 的 `deploy` job
 - 首次自动部署：push 到 main → 等 CI 全绿 → 服务器上拉镜像、迁移、起栈、健康检查
 - 公网验收：登录 → 领券 → 下单；一单走取消、一单等超时关单；第三单走支付 + PAID 后取消被拒
 - 回滚演练：把 IMAGE_TAG 切回上一版 → 重建 → 站点恢复 → 再切回新版本
@@ -147,4 +150,82 @@ curl -fsS http://127.0.0.1:8080/api/v1/health
 
 ## 证据
 
-（实施后回填）
+### S7a（2026-11-11，本机 Docker Desktop，全是 Linux 容器）
+
+**1. prod compose 起全栈**（`deploy/docker-compose.prod.yml`，与服务器同一份）
+
+```
+commerce-api     …/commerce-core/api:local      Up (healthy)
+commerce-beat    …/commerce-core/api:local      Up
+commerce-mysql   …/commerce-core/mysql:8.0.43   Up (healthy)
+commerce-redis   …/commerce-core/redis:7.4.2    Up (healthy)
+commerce-web     …/commerce-core/web:local      Up
+commerce-worker  …/commerce-core/api:local      Up
+```
+
+镜像体积（本地构建）：api **360 MB**、web **240 MB**。`docker compose config -q` 通过。
+
+**2. nginx（配置打进 web 镜像，服务器与本地同一份）**
+
+| 请求 | 结果 |
+|---|---|
+| `GET /` | 200，`Cache-Control: no-store`，返回 index.html |
+| `GET /orders` 直接刷新 | 200，浏览器里被前端守卫转到 `/login?redirect=/orders`，**不是 404** |
+| `GET /assets/index-*.js` | 200，`Cache-Control: public, max-age=2592000, immutable`，`Content-Encoding: gzip` |
+| `GET /assets/nope.js` | 404（不落到 index.html） |
+| `GET /admin/`（来自 172.x） | 302，走内网放行分支 |
+| `GET /admin/`（来自 10.99.0.1） | **404**，nginx 日志 `access forbidden by rule, client: 10.99.0.1` |
+| `GET /api/v1/health` | 200 `{"status": "ok", "db": true, "redis": true}` |
+
+C1 的 404 分支不是靠读配置确认的：另起一个容器挂在 `10.99.0.0/16`（不在 allow 列表内），用同一份 conf
+请求 `/admin/` 得到 404，同一容器上 `/` 与 `/api/v1/health` 仍 200 —— 拦截只落在 `/admin/`。
+本机从 127.0.0.1 访问时来源是 172.x，命中放行分支，这也是它显示 302 而不是 404 的原因。
+
+**3. 业务闭环 13/13**（在 api 容器里用 urllib 打 `http://web/api/v1`，走 nginx 反代，不是直连 uWSGI）
+
+| 检查 | 结果 |
+|---|---|
+| 登录 | 200，拿到 access |
+| 商品列表 / 详情含 SKU | 200 / 200 |
+| 领券 / 我的券 | 201 / 200（unused=3） |
+| 下单（带券） | 201，`discount_amount=30.00` |
+| 同 client_token 重放 | 200，返回同一 `order_no`（C5 的幂等路径） |
+| 模拟支付 | 200，`status=1`（PAID） |
+| 重复支付 | 200（幂等） |
+| 已支付再取消 | 409 `ORDER_STATUS_INVALID` |
+| 取消订单 | 200，`status=2`（CANCELLED） |
+| 已取消再支付 | 409 `ORDER_NOT_PAYABLE` |
+| 超时关单 | 订单改到过期后 **3 秒**变 `status=3`（CLOSED） |
+
+**4. worker / beat 真的在跑**
+
+- worker：`celery@… ready.`，任务表里有 `trade.tasks.close_expired_orders`
+- beat：`beat: Starting...`，`db -> /tmp/celerybeat-schedule`（写在 tmp，不污染 /app）
+- 关单证据就是上表最后一行：库里的 PENDING 订单过期后被改成 CLOSED，不是接口自己算的
+
+**5. 预演挡住的三个问题**
+
+1. **镜像缺 `packaging`**：kombu 的 redis transport `from packaging.version import Version`，而 `packaging` 原先只写在
+   `requirements-dev.txt` 里。worker 与 beat 起容器就 `ModuleNotFoundError` 重启，而 `/api/v1/health` 仍然是绿的
+   —— api 不碰 broker，健康检查看不出来。修：`packaging` 挪进 `requirements.txt`。
+2. **只重建 api 不重建 web = 整站 502**：nginx 启动时解析一次上游地址并缓存，api 容器换 IP 后还打旧地址。
+   正常部署两个镜像一起换 tag、一起重建，所以不受影响；手工 `up -d --no-deps api` 之后必须补 `restart web`。
+   已写进 `ops/runbook.md`。
+3. **`docker compose run` 没有 TTY 时命令跑完仍判失败**：CI 与脚本里必须加 `-T`，否则部署脚本会在
+   迁移成功后报错退出。已写进 runbook 与下面的命令清单。
+
+**6. CI**
+
+`.github/workflows/ci.yml` 的 `images` job 用 YAML 解析 + 断言校验过（jobs 齐全、`needs: [lint, test]`、
+api/web 两步都在、compose 六个 service 与 `8080:80` 对得上）。真正的 build + push 结果要看 GitHub Actions
+的实际运行，记录在下面"未完成"。
+
+### S7a 没做 / 明确留到 S7b
+
+- `deploy` job、部署密钥、三个 Secret、服务器上的任何操作
+- WSL2 里再跑一遍 nginx：nginx 已经在 Linux 容器里验证，且容器用的就是服务器那个镜像，
+  再用 WSL2 跑同一份 conf 提供不了新信息，这一步取消
+- `/static/`（Django admin 的 CSS）：admin 只对内网放行，页面能开但没有样式；业务验收不依赖 admin
+  （数据由 `seed_demo` 造）。要用 admin 调数据时再单独解决
+
+（S7b 证据待回填）
