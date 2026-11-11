@@ -26,7 +26,7 @@ tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`；CI 每次 push 都绿（lint + t
 
 ## 下一步
 
-**S7 部署与 CI/CD**（最大的一站，先写 `docs/phases/phase7.md`）：
+**S7 部署与 CI/CD**（拆成两段：S7a 本地与 CI 不动服务器，S7b 部署与回滚要确认；计划见 `docs/phases/phase7.md`）：
 
 - `deploy/docker-compose.prod.yml` 补 worker / beat 两个 service（同一个 api 镜像，不同命令）
 - nginx 托管前端静态资源 + history fallback（现在 `/` 还是一行纯文本）
@@ -49,7 +49,7 @@ tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`；CI 每次 push 都绿（lint + t
 
 ## 接手提示（新会话读到这里就够）
 
-1. 先读 `AGENTS.md` → 本文件 → 当前阶段文件（现在是 `docs/phases/phase7.md`，尚未创建）
+1. 先读 `AGENTS.md` → 本文件 → 当前阶段文件（`docs/phases/phase7.md` 已写好，从 S7a 开始）
 2. 动服务器前读 `..\ops\runbook.md`；每次服务器操作追加到 `..\ops\server-log.md`
 3. 推 GitHub 要带本机代理 `-c http.proxy=http://127.0.0.1:10808`；推 Gitee 直连
 4. 本机开发：`cd backend && .venv\Scripts\python -m pytest -q`；前端 `cd frontend && npm run dev`
