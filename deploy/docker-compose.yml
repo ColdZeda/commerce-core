@@ -9,7 +9,7 @@ services:
       - --innodb-lock-wait-timeout=10
       - --innodb-buffer-pool-size=128M
       - --performance-schema=OFF
-      - --max-connections=50
+      - --max-connections=120
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
     environment:
