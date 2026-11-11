@@ -48,8 +48,7 @@
 - [x] `docker compose -f deploy/docker-compose.prod.yml up -d` 在本机能起全栈，`/api/v1/health` 200
 - [x] 公网同款的 nginx 配置：`/` 返回前端页面、`/assets/*` 命中静态文件、`/orders` 刷新不 404、`/admin/` 404
 - [x] worker/beat 真的在跑：造一张已过期订单，60 秒内被关单（实测 3 秒）
-- [ ] CI 的 build 产出 api 与 web 两个镜像，tag 为 sha；lint/test 仍全绿
-      —— 工作流已写好并通过本地 YAML 校验，等 GitHub 推送成功后在 Actions 上实跑确认
+- [x] CI 的 build 产出 api 与 web 两个镜像，tag 为 sha；lint/test 仍全绿（run 43019507452，`fee2b17`）
 - [x] 本机全栈走通：登录 → 领券 → 下单 → 支付 → 取消/关单
 
 **S7b**
@@ -214,12 +213,16 @@ C1 的 404 分支不是靠读配置确认的：另起一个容器挂在 `10.99.0
    已写进 `ops/runbook.md`。
 3. **`docker compose run` 没有 TTY 时命令跑完仍判失败**：CI 与脚本里必须加 `-T`，否则部署脚本会在
    迁移成功后报错退出。已写进 runbook 与下面的命令清单。
+4. **ACR 拒收 buildx 的 attestation 清单**：第一次 CI 在推镜像这一步挂了，报
+   `denied: unknown manifest class for application/vnd.oci.empty.v1+json`。buildx 默认给镜像附带
+   provenance/SBOM 证明清单（OCI 1.1），阿里云个人版 ACR 不认。修：两个构建步骤都加 `provenance: false`
+   与 `sbom: false`，推上去的就是普通单平台镜像。这个报错只在 CI 日志里，本地 `docker build` 看不出来。
 
 **6. CI**
 
-`.github/workflows/ci.yml` 的 `images` job 用 YAML 解析 + 断言校验过（jobs 齐全、`needs: [lint, test]`、
-api/web 两步都在、compose 六个 service 与 `8080:80` 对得上）。真正的 build + push 结果要看 GitHub Actions
-的实际运行，记录在下面"未完成"。
+`fee2b17` 的 run **43019507452** 全绿：`lint` 16 s、`test` 48 s、`build & push` 2 分 43 秒，
+产出 `api:fee2b17` 与 `web:fee2b17` 两个镜像并推到 ACR（步骤里 `push: true`，推失败会红）。
+第一次失败是上面第 4 条，修完复跑即绿。
 
 ### S7a 没做 / 明确留到 S7b
 

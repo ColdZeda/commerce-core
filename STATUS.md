@@ -17,6 +17,8 @@ tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`。
   每个 service 加了 json-file 日志上限（10m×3）
 - `.github/workflows/ci.yml` 加 `images` job：lint+test 全绿后构建 api 与 web，main 上推 ACR（sha tag），PR 上只构建
 - 本机全栈预演 13/13：登录→领券→下单（券减 30）→支付→幂等重放→取消→409 分支→过期订单 **3 秒**被 worker 关掉
+- CI 全绿（run 43019507452，`fee2b17`）：lint 16 s、test 48 s、build & push 2 分 43 秒，
+  `api:fee2b17` 与 `web:fee2b17` 已推到 ACR
 
 **服务器**：`http://120.24.67.82:8080`，4 个容器（api/mysql/redis/nginx）healthy；
 服务器上跑的仍是 **S2 镜像**，S3–S7a 的代码都没部署。
@@ -35,12 +37,10 @@ tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`。
 
 ## 卡点
 
-推 GitHub 要本机代理：今天直连被 reset，带 `127.0.0.1:10808` 时若代理没开会失败。
-Gitee 直连正常。CI 的 build/push 实跑要等 GitHub 推上去才看得到结果。
+无。推 GitHub 偶发连不上（直连会 reset、走代理看代理有没有开），重试即可。
 
 ## 未验证（不许当成已完成）
 
-- CI 的 `images` job 只做了本地 YAML 校验，**还没在 GitHub Actions 上真跑过**（要等推送成功）
 - S3–S7a 代码还没上服务器：公网仍是 S2 镜像，`/api/v1/orders` 仍是 404
 - 公网部署、三单验收、回滚演练、服务器内存实测（S7b）
 - Django admin 的 `/static/` 没托管：内网能开页面但没有样式；业务验收不依赖 admin
