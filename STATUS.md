@@ -48,7 +48,8 @@ tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`。
 
 ## 接手提示（新会话读到这里就够）
 
-1. 先读 `AGENTS.md` → 本文件 → 当前阶段文件（`docs/phases/phase7.md`，从 S7b 开始）
+1. 先读 `AGENTS.md` → 本文件 → 当前阶段文件（`docs/phases/phase7.md`，从 S7b 开始；
+   S7b 的前置五件事写在那一节的「开工前定下的五件事」里）
 2. 动服务器前读 `..\ops\runbook.md`；每次服务器操作追加到 `..\ops\server-log.md`
 3. 推 GitHub 要带本机代理 `-c http.proxy=http://127.0.0.1:10808`；推 Gitee 直连
 4. 本机开发：`cd backend && .venv\Scripts\python -m pytest -q`；前端 `cd frontend && npm run dev`

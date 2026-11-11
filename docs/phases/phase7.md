@@ -33,6 +33,20 @@
 - 回滚演练：把 IMAGE_TAG 切回上一版 → 重建 → 站点恢复 → 再切回新版本
 - 实测记录：`free -m`、`docker stats --no-stream`、各服务内存，写进证据
 
+#### S7b 开工前定下的五件事（2026-11-11 收工，S7a 结束时）
+
+1. **密钥落在仓库外**：`E:\projects\commerce-core\ops\deploy_key`（`ssh-keygen -t ed25519`，不带口令）。
+   公钥可以贴给你，私钥不聊天、不进 Git、不进文档，由你自己粘进 GitHub Secrets。
+2. **服务器现状是 S2 栈**（4 容器、nginx 用 `nginx:stable` 挂 `.env` 与 conf）。新 compose 是 6 容器，
+   `commerce-nginx` 会被 `commerce-web` 替掉，旧的 `/opt/commerce-core/nginx/default.conf` 不再挂载。
+3. **回滚演练必须等第二次部署**：ACR 里没有 `web:s2`，第一次从 s2 升到 sha 之后
+   `.previous_tag=s2` 是回不去的。所以流程是：部署 sha1 → 再推一个提交部署 sha2 → 从 sha2 回滚到 sha1。
+   `deploy.sh` 回滚前先确认目标 tag 的 `api` 与 `web` 两个镜像都存在，缺一个就报错退出、不动现有栈。
+4. **compose 文件由 CI 复制到 `/opt/commerce-core/`**，`.env` 一律不动（AGENTS §1.11，用户维护）；
+   迁移用 `docker compose run --rm -T api ...`（无 TTY 必须 `-T`，见上面第 3 条坑）。
+5. **首次部署后要用户补两个 `.env` 键**：`ENABLE_MOCK_PAY=true`（否则支付按钮 403）、
+   `PAY_CALLBACK_SECRET`（独立于 `SECRET_KEY`）。`IMAGE_TAG` 由脚本改写，不用手工填。
+
 ## 明确不做
 
 - 不做蓝绿/多机、不宣称零停机（单机 Compose 重建会有秒级不可用）
