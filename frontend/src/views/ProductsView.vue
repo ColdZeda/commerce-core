@@ -1,7 +1,7 @@
 <script setup>
 import { ElMessage } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
 import { fetchProducts } from '../api/catalog'
 import { claimCoupon, fetchCoupons } from '../api/coupons'
@@ -164,20 +164,25 @@ onMounted(() => {
           v-else
           class="product-grid"
         >
-          <el-card
+          <RouterLink
             v-for="product in products"
             :key="product.id"
-            shadow="hover"
-            class="product-card"
+            :to="{ name: 'product-detail', params: { id: product.id } }"
+            class="product-link"
           >
-            <h3>{{ product.name }}</h3>
-            <p class="product-subtitle">
-              {{ product.subtitle }}
-            </p>
-            <p class="product-price">
-              ¥{{ product.min_price ?? '—' }}
-            </p>
-          </el-card>
+            <el-card
+              shadow="hover"
+              class="product-card"
+            >
+              <h3>{{ product.name }}</h3>
+              <p class="product-subtitle">
+                {{ product.subtitle }}
+              </p>
+              <p class="product-price">
+                ¥{{ product.min_price ?? '—' }}
+              </p>
+            </el-card>
+          </RouterLink>
         </div>
 
         <el-pagination

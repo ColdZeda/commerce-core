@@ -7,3 +7,7 @@ export function fetchCoupons(params) {
 export function claimCoupon(id) {
   return http.post(`/coupons/${id}/claim`).then((response) => response.data)
 }
+
+export function fetchMyCoupons(params) {
+  return http.get('/me/coupons', { params }).then((response) => response.data)
+}

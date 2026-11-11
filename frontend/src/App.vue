@@ -20,7 +20,13 @@ function logout() {
       class="brand"
       to="/products"
     >commerce-core</RouterLink>
-    <div class="account">
+    <nav class="account">
+      <RouterLink
+        v-if="auth.isAuthenticated"
+        to="/orders"
+      >
+        我的订单
+      </RouterLink>
       <span
         v-if="auth.isAuthenticated"
         class="account-name"
@@ -37,7 +43,7 @@ function logout() {
         v-else
         to="/login"
       >登录</RouterLink>
-    </div>
+    </nav>
   </header>
 
   <RouterView />

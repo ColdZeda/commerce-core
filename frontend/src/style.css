@@ -101,6 +101,11 @@ a {
   gap: 16px;
 }
 
+.product-link {
+  display: block;
+  color: inherit;
+}
+
 .product-card h3 {
   margin: 0 0 6px;
   font-size: 16px;
@@ -137,4 +142,84 @@ a {
 .auth-submit {
   width: 100%;
   margin-top: 8px;
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.detail-main h1 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+
+.detail-main h2 {
+  font-size: 16px;
+  margin: 24px 0 8px;
+}
+
+.detail-desc {
+  color: #4b5563;
+  line-height: 1.7;
+}
+
+.detail-qty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.detail-coupon {
+  width: 320px;
+}
+
+.detail-summary {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-submit {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.detail-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.money {
+  color: #dc2626;
+  font-size: 18px;
+}
+
+.orders-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.orders-toolbar h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.detail-items-title {
+  font-size: 15px;
+  margin: 20px 0 8px;
+}
+
+@media (max-width: 720px) {
+  .detail-layout {
+    grid-template-columns: 1fr;
+  }
 }

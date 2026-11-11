@@ -1,4 +1,5 @@
 import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
@@ -12,7 +13,8 @@ import './style.css'
 const app = createApp(App)
 const pinia = createPinia()
 
-app.use(pinia).use(router).use(ElementPlus)
+// 组件自带的文案（确认框按钮、空状态等）跟着界面走中文。
+app.use(pinia).use(router).use(ElementPlus, { locale: zhCn })
 
 const auth = useAuthStore(pinia)
 configureAuth({

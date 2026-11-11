@@ -134,6 +134,9 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+# 待支付订单的存活时间，运营规则是 15 分钟；写进 expire_at 落库，S6 的关单扫描才有索引条件。
+ORDER_EXPIRE_MINUTES = float(env("ORDER_EXPIRE_MINUTES", "15"))
+
 LOG_LEVEL = env("DJANGO_LOG_LEVEL", "INFO")
 LOGGING = {
     "version": 1,
