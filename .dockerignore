@@ -9,7 +9,9 @@
 .ruff_cache
 .scratch
 .env
+**/.env
 .env.*
+**/.env.*
 docs
 **/node_modules
 frontend/dist
