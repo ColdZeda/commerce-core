@@ -39,3 +39,5 @@ Thumbs.db
 # 工具产物
 .acl-recovery/
 backend/staticfiles/
+# beat 的本地调度状态，起 beat 就会生成
+backend/celerybeat-schedule*

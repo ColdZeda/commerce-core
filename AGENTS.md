@@ -63,6 +63,10 @@ cd backend && pytest -q
 cd backend && ruff check . && ruff format --check .
 python scripts/check_comments.py backend
 cd frontend && npm run lint
+
+# 异步关单（Windows 上 beat 与 worker 必须分两个进程，-B 会被 Celery 拒绝）
+cd backend && .venv\Scripts\celery -A config worker -l info --pool=solo
+cd backend && .venv\Scripts\celery -A config beat -l info
 ```
 
 > 网络：本机代理在 `127.0.0.1:10808`（浏览器走系统代理，git 默认直连，所以连 GitHub 会间歇失败）。
@@ -73,17 +77,17 @@ cd frontend && npm run lint
 
 看 `STATUS.md`。阶段记录在 `docs/phases/phaseN.md`，编号与 `docs/plan.md` §11 的阶段号一一对应。
 
-## §4 代码地图（目录级；S4 后更新）
+## §4 代码地图（目录级；S5 后更新）
 
 ```
 repo/
 ├─ backend/
-│  ├─ config/    settings 分层、URL 根表、分页、异常收口
+│  ├─ config/    settings 分层、URL 根表、分页、异常收口、Celery 应用
 │  ├─ accounts/  登录/刷新/me，Bearer 认证与 token 错误分类
 │  ├─ catalog/   商品与 SKU：模型、列表/详情接口、admin、seed_demo、tests
 │  ├─ promotion/ 券与用户券：模型、列表/领取/我的券、领券 service、并发测试
-│  ├─ trade/     订单：状态规则表、下单/取消 service（行锁、券核销、快照、幂等）、四个接口
-│  ├─ stocklab/  库存实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、压测脚本（不接主流程）
+│  ├─ trade/     订单：状态规则表、下单/取消/关单 service、关单任务、四个接口
+│  ├─ stocklab/  实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、关单反例、压测脚本（不接主流程）
 │  ├─ health/    就绪探针
 │  ├─ common/    抽象模型（时间戳）与业务错误类型
 │  ├─ tests/     跨 app 测试

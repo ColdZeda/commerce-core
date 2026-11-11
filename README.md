@@ -57,6 +57,14 @@ py -3.12 -m venv .venv
 
 前端：`cd frontend && npm install && npm run dev`（Vite 把 `/api` 代理到 `127.0.0.1:8000`）。
 
+异步关单（可选，本地验证用；Windows 上 beat 与 worker 必须分两个进程）：
+
+```bash
+cd backend
+.venv\Scripts\celery -A config worker -l info --pool=solo
+.venv\Scripts\celery -A config beat -l info
+```
+
 ## 测试
 
 ```bash
