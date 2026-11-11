@@ -77,7 +77,7 @@ cd backend && .venv\Scripts\celery -A config beat -l info
 
 看 `STATUS.md`。阶段记录在 `docs/phases/phaseN.md`，编号与 `docs/plan.md` §11 的阶段号一一对应。
 
-## §4 代码地图（目录级；S5 后更新）
+## §4 代码地图（目录级；S6 后更新）
 
 ```
 repo/
@@ -86,13 +86,13 @@ repo/
 │  ├─ accounts/  登录/刷新/me，Bearer 认证与 token 错误分类
 │  ├─ catalog/   商品与 SKU：模型、列表/详情接口、admin、seed_demo、tests
 │  ├─ promotion/ 券与用户券：模型、列表/领取/我的券、领券 service、并发测试
-│  ├─ trade/     订单：状态规则表、下单/取消/关单 service、关单任务、四个接口
+│  ├─ trade/     订单：状态规则表、下单/取消/关单/支付 service、回调签名、关单任务、六个接口
 │  ├─ stocklab/  实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、关单反例、压测脚本（不接主流程）
 │  ├─ health/    就绪探针
 │  ├─ common/    抽象模型（时间戳）与业务错误类型
 │  ├─ tests/     跨 app 测试
 │  └─ scripts/   db_smoke、check_lock
-├─ frontend/     Vue 3 + Vite SPA：/login、/products、/products/:id（结算）、/orders（详情与我的券抽屉）、
+├─ frontend/     Vue 3 + Vite SPA：/login、/products、/products/:id（结算）、/orders（详情、我的券、支付、取消）、
 │                api 层、auth store、路由守卫
 ├─ deploy/       docker-compose.yml、Dockerfile、uwsgi.ini、mysql/init
 ├─ scripts/      CI 检查脚本（check_comments.py）
