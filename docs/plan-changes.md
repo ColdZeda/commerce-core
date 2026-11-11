@@ -71,6 +71,20 @@
 - **路由**：目前只有 `/` → `/products`、`/login`、`/products`，未匹配路径一律回商品页；
   商品详情页与订单页按 plan §8 在 S3 一起做。
 
+## D-006 S4 实验区位置与压测环境（2026-11-11）
+
+- **实验代码放 `backend/stocklab/`，不建仓库根的 `experiments/`**。plan §6.3 写的是"`experiments/` 可由
+  pytest 收集并进入 CI"，但本仓库三个质量入口都以 `backend/` 为根：`pytest` 的 `testpaths=["."]`、
+  lint job 里的 `ruff check .`、`scripts/check_comments.py backend`。放根目录要同时改三处配置并给 pytest
+  补 `sys.path`，才能让实验代码被收集、被 lint、被注释检查；放 `backend/stocklab/` 一处都不用改。
+  影响：AGENTS §4 代码地图与 README 的目录说明同步改成 `backend/stocklab/`，plan 正文不动。
+- **本机 MySQL `max_connections` 50 → 120**（`deploy/docker-compose.yml`）。plan §9.3 的并发口径是
+  "200 请求 / 50 并发"，50 条线程连接 + 主连接会顶到 50 的上限，报 `(1040, 'Too many connections')`。
+  生产 compose 仍保持 50（2 vCPU / 1.6 GiB 的预算），CI 用镜像默认 151；三处数值在 phase4 证据里分别写明。
+- **B 的重试预算仍是 3 次**（plan §6.2 的初始值），但报告里额外跑了一组"10 次重试"作对照：
+  3 次在 50 并发热点下成交率过低，没有这组对照，读者无法判断"卖不完"是方案问题还是预算问题。
+
+
 
 
 

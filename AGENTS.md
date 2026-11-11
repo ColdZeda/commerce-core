@@ -73,7 +73,7 @@ cd frontend && npm run lint
 
 看 `STATUS.md`。阶段记录在 `docs/phases/phaseN.md`，编号与 `docs/plan.md` §11 的阶段号一一对应。
 
-## §4 代码地图（目录级；S3 后更新）
+## §4 代码地图（目录级；S4 后更新）
 
 ```
 repo/
@@ -83,6 +83,7 @@ repo/
 │  ├─ catalog/   商品与 SKU：模型、列表/详情接口、admin、seed_demo、tests
 │  ├─ promotion/ 券与用户券：模型、列表/领取/我的券、领券 service、并发测试
 │  ├─ trade/     订单：状态规则表、下单/取消 service（行锁、券核销、快照、幂等）、四个接口
+│  ├─ stocklab/  库存实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、压测脚本（不接主流程）
 │  ├─ health/    就绪探针
 │  ├─ common/    抽象模型（时间戳）与业务错误类型
 │  ├─ tests/     跨 app 测试
@@ -90,7 +91,6 @@ repo/
 ├─ frontend/     Vue 3 + Vite SPA：/login、/products、/products/:id（结算）、/orders（详情与我的券抽屉）、
 │                api 层、auth store、路由守卫
 ├─ deploy/       docker-compose.yml、Dockerfile、uwsgi.ini、mysql/init
-├─ experiments/  C 方案（Redis 预扣）独立实验，不接默认下单链路（S4）
 ├─ scripts/      CI 检查脚本（check_comments.py）
 ├─ docs/         计划、修订记录、阶段记录
 └─ .github/      CI：lint + test

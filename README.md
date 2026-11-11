@@ -63,6 +63,7 @@ py -3.12 -m venv .venv
 cd backend
 pytest -q                        # 接口与探针契约，需要容器里的 MySQL/Redis 在跑
 pytest -q -m concurrency         # 真实 MySQL 并发用例（S3 起：同 token 下单、超卖、重复取消）
+.venv\Scripts\python -m stocklab.bench   # 手工压测 A/B/C，只出成功数与延迟，不产出 QPS（S4）
 python scripts/check_comments.py backend   # 注释规范，见 AGENTS.md §6
 ```
 
@@ -72,9 +73,9 @@ CI 只跑 lint + test（`.github/workflows/ci.yml`）；build / push / deploy �
 
 ```
 backend/       Django 应用（config/settings 分层、health 探针、tests）
+backend/stocklab/  库存实验区：B 乐观锁对照、C 的 Redis 预扣/补偿/对账、压测脚本（不接主流程）
 frontend/      Vue 3 SPA（四路由：/login、/products、/products/:id、/orders）
 deploy/        compose、Dockerfile、uWSGI
-experiments/   Redis 预扣实验，不接默认下单链路（S4）
 scripts/       检查脚本
 docs/          计划、修订记录、阶段记录
 ```
