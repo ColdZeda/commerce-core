@@ -28,7 +28,8 @@ flowchart LR
   W --> M
 ```
 
-下单是同步事务：锁 SKU 行 → 扣减 → 核销券 → 写订单与明细快照。
+下单是同步事务：锁 SKU 行 → 校验库存 → 算总额 → 核销券 → 扣减 → 写订单与明细快照；
+同一个 `client_token` 重试只落一单，返回原单并带 `X-Idempotent-Replay: 1`。
 关单是异步：beat 每分钟扫表，条件更新 + 同事务回补库存与退券。
 
 ## 本地运行（Windows 开发）
@@ -61,7 +62,7 @@ py -3.12 -m venv .venv
 ```bash
 cd backend
 pytest -q                        # 接口与探针契约，需要容器里的 MySQL/Redis 在跑
-pytest -q -m concurrency         # S4 起：真实 MySQL 并发用例
+pytest -q -m concurrency         # 真实 MySQL 并发用例（S3 起：同 token 下单、超卖、重复取消）
 python scripts/check_comments.py backend   # 注释规范，见 AGENTS.md §6
 ```
 
@@ -71,7 +72,7 @@ CI 只跑 lint + test（`.github/workflows/ci.yml`）；build / push / deploy �
 
 ```
 backend/       Django 应用（config/settings 分层、health 探针、tests）
-frontend/      Vue 3 SPA（S0 只有自检页，四个业务路由在 S1/S2 落地）
+frontend/      Vue 3 SPA（四路由：/login、/products、/products/:id、/orders）
 deploy/        compose、Dockerfile、uWSGI
 experiments/   Redis 预扣实验，不接默认下单链路（S4）
 scripts/       检查脚本
