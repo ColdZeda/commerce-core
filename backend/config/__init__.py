@@ -13,3 +13,6 @@ if _driver == "pymysql":
     import pymysql
 
     pymysql.install_as_MySQLdb()
+
+# Celery 的 CLI 靠这个属性找应用：celery -A config worker / beat。
+from .celery import app as celery_app  # noqa: E402,F401

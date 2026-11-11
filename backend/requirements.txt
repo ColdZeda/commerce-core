@@ -8,9 +8,26 @@ cryptography==46.0.7
 python-dotenv==1.2.4
 redis==8.1.0
 
+# 异步关单（S5）：Celery + Redis 作 broker；不启用 result backend，也不装 celery-beat 的 DB scheduler
+celery==5.7.0
+kombu==5.7.0
+amqp==5.4.2
+billiard==4.3.2
+vine==5.1.0
+click==8.5.1
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.4.1
+python-dateutil==2.9.0.post0
+six==1.17.0
+tzlocal==5.4.5
+
 # 传递依赖一并锁死，保证换机器重装解析到同一套版本
 asgiref==3.13.0
 sqlparse==0.6.1
 tzdata==2026.6
 cffi==2.1.1
 pycparser==3.12
+prompt-toolkit==3.0.53
+wcwidth==0.9.4
+typing-extensions==4.16.0

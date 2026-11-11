@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 from rest_framework import status
 
@@ -59,29 +59,68 @@ def create_order(
 def cancel_order(user, order_no: str, reason: str = "") -> Order:
     """取消待支付订单；已取消直接返回原单，其他状态抛 ORDER_STATUS_INVALID。"""
     rule = RULES[(Order.Status.PENDING, Order.Status.CANCELLED)]
-    now = timezone.now()
     with transaction.atomic():
         order = Order.objects.filter(order_no=order_no, user=user).first()
         if order is None:
             # 他人订单同样 404，不能让单号成为探测手段。
             raise BusinessError("NOT_FOUND", "订单不存在", status.HTTP_404_NOT_FOUND)
 
-        # 条件更新是"赢家"的唯一凭据：并发取消 / 将来与关单抢同一单时，只有一行受影响。
-        moved = Order.objects.filter(pk=order.pk, status=rule.source).update(
-            status=rule.target,
-            cancel_reason=reason[:200],
-            updated_at=now,
-        )
-        if not moved:
+        if not _apply_transition(order, rule.target, fields={"cancel_reason": reason[:200]}):
             order.refresh_from_db()
             if order.status == rule.target:
                 return order
             raise BusinessError("ORDER_STATUS_INVALID", "当前状态不能取消", status.HTTP_409_CONFLICT)
-
-        for effect in rule.effects:
-            EFFECTS[effect](order)
         order.refresh_from_db()
         return order
+
+
+def close_order(order_no: str, now=None) -> Order | None:
+    """关闭已到期未支付订单；返回关掉的订单，未关闭（已支付/已取消/未到期）返回 None。"""
+    now = now or timezone.now()
+    with transaction.atomic():
+        order = Order.objects.filter(order_no=order_no).first()
+        if order is None:
+            return None
+        # 到期判断放进 WHERE：扫表时读到的 expire_at 只是候选条件，不能当关闭依据。
+        closed = _apply_transition(
+            order,
+            Order.Status.CLOSED,
+            extra=Q(expire_at__lt=now),
+            fields={"closed_at": now},
+        )
+        if not closed:
+            return None
+        order.refresh_from_db()
+        return order
+
+
+def close_expired_orders(batch: int = 100, now=None) -> dict[str, int]:
+    """扫到期未支付订单并逐单关闭；返回 scanned / closed / skipped 三个计数。"""
+    now = now or timezone.now()
+    candidates = list(
+        Order.objects.filter(status=Order.Status.PENDING, expire_at__lt=now)
+        .order_by("expire_at")
+        .values_list("order_no", flat=True)[:batch]
+    )
+    closed = sum(1 for order_no in candidates if close_order(order_no, now=now))
+    return {"scanned": len(candidates), "closed": closed, "skipped": len(candidates) - closed}
+
+
+def _apply_transition(order: Order, target: int, *, extra=None, fields=None) -> bool:
+    """条件更新的唯一执行器；返回是否由本次调用完成迁移（赢家）。
+
+    先读状态再 save 的写法在并发下会双回补，见 stocklab/close_lab.py 的反例。
+    """
+    rule = RULES[(Order.Status.PENDING, target)]
+    queryset = Order.objects.filter(pk=order.pk, status=rule.source)
+    if extra is not None:
+        queryset = queryset.filter(extra)
+    moved = queryset.update(status=rule.target, updated_at=timezone.now(), **(fields or {}))
+    if not moved:
+        return False
+    for effect in rule.effects:
+        EFFECTS[effect](order)
+    return True
 
 
 def _create_locked(user, items: list[dict], user_coupon_id, token, remark) -> Order:

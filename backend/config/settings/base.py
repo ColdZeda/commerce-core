@@ -134,7 +134,7 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# 待支付订单的存活时间，运营规则是 15 分钟；写进 expire_at 落库，S6 的关单扫描才有索引条件。
+# 待支付订单的存活时间，运营规则是 15 分钟；写进 expire_at 落库，关单扫描才有索引条件。
 ORDER_EXPIRE_MINUTES = float(env("ORDER_EXPIRE_MINUTES", "15"))
 
 LOG_LEVEL = env("DJANGO_LOG_LEVEL", "INFO")
@@ -145,4 +145,24 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "standard"}},
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {"django.db.backends": {"level": "WARNING"}},
+}
+
+# 关单任务：beat 每分钟投递一次，任务硬超时 60 秒。
+# visibility_timeout 取 2 倍硬超时：一个跑满 60 秒被杀的 worker 不会在"可能还在跑"的窗口里被重投；
+# 代价是崩溃后最多 2 分钟才重投，对分钟级扫描可以接受。抄 600 会让崩溃恢复慢 10 分钟。
+CELERY_BROKER_URL = REDIS_URL
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 120}
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TASK_SOFT_TIME_LIMIT = 50
+CELERY_TASK_TIME_LIMIT = 60
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    "close-expired-orders": {
+        "task": "trade.tasks.close_expired_orders",
+        "schedule": 60.0,
+    },
 }

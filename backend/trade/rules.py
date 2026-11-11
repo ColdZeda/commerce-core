@@ -1,6 +1,6 @@
 """订单状态迁移规则：允许哪些迁移、各带哪些副作用、重复请求算什么，都写成数据而不是散落的 if。
 
-S5/S6 只往 TRANSITIONS 里加行（→ PAID、→ CLOSED），迁移的执行方式不再改。
+S6 只往 TRANSITIONS 里加 → PAID 一行，迁移的执行方式不再改。
 """
 
 from dataclasses import dataclass
@@ -20,10 +20,15 @@ class Transition:
 
 
 TRANSITIONS = (
-    # 用户取消与将来的超时关单共用这条：回补库存、退券都必须在同一事务里。
+    # 用户取消与超时关单共用同一条副作用：回补库存、退券都必须在同一事务里。
     Transition(
         source=Order.Status.PENDING,
         target=Order.Status.CANCELLED,
+        effects=(RESTOCK, RETURN_COUPON),
+    ),
+    Transition(
+        source=Order.Status.PENDING,
+        target=Order.Status.CLOSED,
         effects=(RESTOCK, RETURN_COUPON),
     ),
 )
