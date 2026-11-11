@@ -45,11 +45,12 @@
 
 **S7a**
 
-- [ ] `docker compose -f deploy/docker-compose.prod.yml up -d` 在本机能起全栈，`/api/v1/health` 200
-- [ ] 公网同款的 nginx 配置：`/` 返回前端页面、`/assets/*` 命中静态文件、`/orders` 刷新不 404、`/admin/` 404
-- [ ] worker/beat 真的在跑：造一张已过期订单，60 秒内被关单
+- [x] `docker compose -f deploy/docker-compose.prod.yml up -d` 在本机能起全栈，`/api/v1/health` 200
+- [x] 公网同款的 nginx 配置：`/` 返回前端页面、`/assets/*` 命中静态文件、`/orders` 刷新不 404、`/admin/` 404
+- [x] worker/beat 真的在跑：造一张已过期订单，60 秒内被关单（实测 3 秒）
 - [ ] CI 的 build 产出 api 与 web 两个镜像，tag 为 sha；lint/test 仍全绿
-- [ ] 本机全栈走通：登录 → 领券 → 下单 → 支付 → 取消/关单
+      —— 工作流已写好并通过本地 YAML 校验，等 GitHub 推送成功后在 Actions 上实跑确认
+- [x] 本机全栈走通：登录 → 领券 → 下单 → 支付 → 取消/关单
 
 **S7b**
 
