@@ -136,6 +136,10 @@ jobs:
           file: deploy/Dockerfile
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ env.ACR_REGISTRY }}/commerce-core/api:${{ steps.tag.outputs.sha }}
+          # ACR 不认 buildx 默认附带的 OCI attestation 清单（unknown manifest class for
+          # application/vnd.oci.empty.v1+json），关掉才推得上去
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -147,6 +151,8 @@ jobs:
           file: deploy/Dockerfile.web
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ env.ACR_REGISTRY }}/commerce-core/web:${{ steps.tag.outputs.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
