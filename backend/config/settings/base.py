@@ -137,6 +137,12 @@ SIMPLE_JWT = {
 # 待支付订单的存活时间，运营规则是 15 分钟；写进 expire_at 落库，关单扫描才有索引条件。
 ORDER_EXPIRE_MINUTES = float(env("ORDER_EXPIRE_MINUTES", "15"))
 
+# 模拟支付开关：prod 默认关，演示环境在 .env 里显式打开。
+ENABLE_MOCK_PAY = env("ENABLE_MOCK_PAY", "false").strip().lower() in {"1", "true", "yes"}
+# 回调签名密钥独立于 JWT：换支付密钥不该连 token 一起作废；留空则回落到 SECRET_KEY。
+PAY_CALLBACK_SECRET = env("PAY_CALLBACK_SECRET", "") or SECRET_KEY
+PAY_CALLBACK_WINDOW_SECONDS = int(env("PAY_CALLBACK_WINDOW_SECONDS", "300"))
+
 LOG_LEVEL = env("DJANGO_LOG_LEVEL", "INFO")
 LOGGING = {
     "version": 1,

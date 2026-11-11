@@ -106,6 +106,29 @@ def close_expired_orders(batch: int = 100, now=None) -> dict[str, int]:
     return {"scanned": len(candidates), "closed": closed, "skipped": len(candidates) - closed}
 
 
+def mark_order_paid(order_no: str, amount, trade_no: str = "") -> tuple[Order, bool]:
+    """把待支付订单记为已支付；返回 (订单, 是否本来就已支付)。
+
+    抛 BusinessError：NOT_FOUND / PAY_AMOUNT_MISMATCH / ORDER_NOT_PAYABLE。
+    trade_no 只进日志与签名，不落库：mock 支付没有流水表。
+    """
+    with transaction.atomic():
+        order = Order.objects.filter(order_no=order_no).first()
+        if order is None:
+            raise BusinessError("NOT_FOUND", "订单不存在", status.HTTP_404_NOT_FOUND)
+        if Decimal(str(amount)) != order.pay_amount:
+            raise BusinessError("PAY_AMOUNT_MISMATCH", "支付金额与订单应付不一致", status.HTTP_409_CONFLICT)
+
+        paid = _apply_transition(order, Order.Status.PAID, fields={"paid_at": timezone.now()})
+        if not paid:
+            order.refresh_from_db()
+            if order.status == Order.Status.PAID:
+                return order, True
+            raise BusinessError("ORDER_NOT_PAYABLE", "订单当前状态不能支付", status.HTTP_409_CONFLICT)
+        order.refresh_from_db()
+        return order, False
+
+
 def _apply_transition(order: Order, target: int, *, extra=None, fields=None) -> bool:
     """条件更新的唯一执行器；返回是否由本次调用完成迁移（赢家）。
 

@@ -30,6 +30,19 @@ class OrderCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
 
 
+class OrderPaySerializer(serializers.Serializer):
+    # mock 支付不接收金额：应付金额由服务端按订单算，避免客户端改价。
+    trade_no = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+
+
+class PaymentCallbackSerializer(serializers.Serializer):
+    order_no = serializers.CharField(max_length=32)
+    trade_no = serializers.CharField(max_length=64)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    timestamp = serializers.IntegerField()
+    sign = serializers.CharField(max_length=128)
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
     sku_id = serializers.IntegerField(read_only=True, allow_null=True)
 

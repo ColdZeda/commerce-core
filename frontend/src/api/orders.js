@@ -19,3 +19,10 @@ export function fetchOrder(orderNo) {
 export function cancelOrder(orderNo, reason) {
   return http.post(`/orders/${orderNo}/cancel`, { reason }).then((response) => response.data)
 }
+
+export function payOrder(orderNo) {
+  return http.post(`/orders/${orderNo}/pay`).then((response) => ({
+    order: response.data,
+    replayed: response.headers['x-idempotent-replay'] === '1',
+  }))
+}

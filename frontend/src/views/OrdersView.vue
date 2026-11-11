@@ -4,7 +4,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { fetchMyCoupons } from '../api/coupons'
-import { cancelOrder, fetchOrder, fetchOrders } from '../api/orders'
+import { cancelOrder, fetchOrder, fetchOrders, payOrder } from '../api/orders'
 
 const TABS = [
   { name: 'all', label: '全部' },
@@ -21,6 +21,13 @@ const CANCEL_ERRORS = {
   NOT_FOUND: '订单不存在',
 }
 
+const PAY_ERRORS = {
+  PAY_NOT_ENABLED: '这个环境没有开启模拟支付',
+  ORDER_NOT_PAYABLE: '这单已经不能支付了',
+  PAY_AMOUNT_MISMATCH: '金额对不上，支付被拒',
+  NOT_FOUND: '订单不存在',
+}
+
 const route = useRoute()
 
 const activeTab = ref('all')
@@ -33,6 +40,7 @@ const loading = ref(false)
 const detail = ref(null)
 const detailVisible = ref(false)
 const cancelling = ref('')
+const paying = ref('')
 
 const coupons = ref([])
 const couponsVisible = ref(false)
@@ -98,6 +106,30 @@ async function cancel(orderNo) {
     ElMessage.warning(CANCEL_ERRORS[error?.response?.data?.code] || '取消失败，请稍后再试')
   } finally {
     cancelling.value = ''
+  }
+}
+
+async function pay(orderNo) {
+  try {
+    await ElMessageBox.confirm('这是模拟支付，只把订单标记为已支付，不会真的扣款。', '模拟支付', {
+      type: 'info',
+    })
+  } catch {
+    return
+  }
+
+  paying.value = orderNo
+  try {
+    const { order, replayed } = await payOrder(orderNo)
+    ElMessage.success(replayed ? '这单之前已经支付过了' : '支付成功')
+    if (detail.value?.order_no === order.order_no) {
+      detail.value = order
+    }
+    await load()
+  } catch (error) {
+    ElMessage.warning(PAY_ERRORS[error?.response?.data?.code] || '支付失败，请稍后再试')
+  } finally {
+    paying.value = ''
   }
 }
 
@@ -175,7 +207,7 @@ onMounted(() => {
       </el-table-column>
       <el-table-column
         label="操作"
-        width="170"
+        width="230"
       >
         <template #default="{ row }">
           <el-button
@@ -184,6 +216,15 @@ onMounted(() => {
             @click="openDetail(row.order_no)"
           >
             详情
+          </el-button>
+          <el-button
+            v-if="isPending(row)"
+            link
+            type="success"
+            :loading="paying === row.order_no"
+            @click="pay(row.order_no)"
+          >
+            支付
           </el-button>
           <el-button
             v-if="isPending(row)"
@@ -289,6 +330,15 @@ onMounted(() => {
           </el-table-column>
         </el-table>
 
+        <el-button
+          v-if="isPending(detail)"
+          type="success"
+          class="detail-submit"
+          :loading="paying === detail.order_no"
+          @click="pay(detail.order_no)"
+        >
+          模拟支付
+        </el-button>
         <el-button
           v-if="isPending(detail)"
           type="danger"

@@ -31,6 +31,12 @@ TRANSITIONS = (
         target=Order.Status.CLOSED,
         effects=(RESTOCK, RETURN_COUPON),
     ),
+    # 支付只写 paid_at 这一列，没有跨表副作用；退款不在本项目范围内。
+    Transition(
+        source=Order.Status.PENDING,
+        target=Order.Status.PAID,
+        effects=(),
+    ),
 )
 
 RULES = {(rule.source, rule.target): rule for rule in TRANSITIONS}
