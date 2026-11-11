@@ -37,7 +37,9 @@ tag：`s0`、`s2`、`s3`、`s4`、`s5`、`s6`。
 
 ## 卡点
 
-无。推 GitHub 偶发连不上（直连会 reset、走代理看代理有没有开），重试即可。
+GitHub 这会儿连不上（`Recv failure: Connection was reset`，试了 3 次）。**`75ebf8d` 目前只在本地与 Gitee**，
+明天开机第一件事：在 `repo/` 里 `git push origin main`（tag `s7a` 已经推上去了，不用重推）。
+推上去会顺带触发一次 CI，正常应该还是绿的。
 
 ## 未验证（不许当成已完成）
 
