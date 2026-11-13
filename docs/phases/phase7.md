@@ -259,4 +259,91 @@ C1 的 404 分支不是靠读配置确认的：另起一个容器挂在 `10.99.0
 - `/static/`（Django admin 的 CSS）：admin 只对内网放行，页面能开但没有样式；业务验收不依赖 admin
   （数据由 `seed_demo` 造）。要用 admin 调数据时再单独解决
 
-（S7b 证据待回填）
+### S7b 首次部署（2026-11-13）
+
+**前置**：CI 专用部署密钥 `commerce-core-deploy` 追加到服务器 `~/.ssh/authorized_keys`（原有 2 把保留，
+追加前后 182 B/3 行 → 285 B/4 行）；GitHub Secrets 五个齐全（`ACR_USERNAME`、`ACR_PASSWORD`、
+`DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY`）；服务器 `.env` 追加 `ENABLE_MOCK_PAY=true`（幂等，
+10 个键，权限 600，改动前备份 `.env.bak.20261113`）。
+
+**check 模式（run 43401639267，只读）**：`SSH_OK`、新编排 `COMPOSE_OK`、当前 tag `s2`、
+四个容器（api/mysql/nginx/redis）、available 1004 MB。确认 `.current_tag` / `.previous_tag` 此时都不存在。
+
+**deploy 模式（run 43403792174，sha `da630e9`）**
+
+```
+[deploy 17:46:11] target=da630e9 current=s2
+[deploy 17:46:13] warn: PAY_CALLBACK_SECRET is empty in .env, related feature will not work
+[deploy 17:46:58] wait for health
+[deploy 17:47:00] deployed da630e9 (previous=s2 recorded in .previous_tag)
+```
+
+- 迁移先于起栈执行（S3–S6 的加表加列）
+- `commerce-nginx` 被删除，`commerce-web` / `worker` / `beat` 新建，`commerce-api` 重建
+- 从拉镜像到健康检查通过约 **49 秒**（其中大部分是拉镜像）；站点不可用窗口小于这个数
+
+**部署后实测**
+
+| 项 | 值 |
+|---|---|
+| 容器 | 6 个：api(healthy) / web / worker / beat / mysql(healthy) / redis(healthy) |
+| tag 文件 | `.current_tag=da630e9`、`.previous_tag=s2` |
+| 内存 | total 1613 / used 878 / available **734 MB**（buff/cache 785） |
+| swap | 2047 MB 中用了 130 MB |
+| 磁盘 | 40G 用 11G（29%） |
+
+`docker stats --no-stream`（部署后约 1 分钟）：
+
+| 容器 | 内存 |
+|---|---|
+| mysql | 149.9 MiB |
+| api | 132.7 MiB |
+| worker | 89.8 MiB |
+| beat | 65.3 MiB |
+| web | 11.7 MiB |
+| redis | 15.3 MiB |
+| **合计** | **约 465 MiB** |
+
+比 plan §10.3 的初始预算（约 0.80–1.15 GB）低，**没有触发任何降级**：beat 保持独立进程、
+uWSGI 仍是 2 process / 2 threads、MySQL buffer pool 仍 128M。
+
+**公网验证（从开发机访问 `http://120.24.67.82:8080`）**
+
+| 路径 | 结果 |
+|---|---|
+| `/` | 200 `text/html`，返回 SPA |
+| `/orders`、`/products` | 200 `text/html`（history fallback 生效） |
+| `/assets/index-*.js` | 200，`Cache-Control: public, max-age=2592000, immutable` |
+| `/admin/` | **404**（C1 仍然是通的） |
+| `/api/v1/health` | 200 `{"status":"ok","db":true,"redis":true}` |
+| `/api/v1/products` | 200 |
+| `/api/v1/orders` | **401**（S2 时代是 404，路由真的上线了） |
+
+**三单验收（在 api 容器里跑，请求走 `http://web/api/v1` 即 nginx 反代）13/13**
+
+| 检查 | 结果 |
+|---|---|
+| 登录 / 商品列表 / 详情含 SKU | 200 / 200 / 200 |
+| 领券 / 我的券 | 201 / 200 |
+| 下单（带券） | 201，`discount_amount=5.00` |
+| 同 client_token 重放 | 200，返回同一 `order_no` |
+| 模拟支付 → 重复支付 | 200（PAID）/ 200（幂等） |
+| **已支付再取消** | **409** `ORDER_STATUS_INVALID` |
+| **取消订单** | 200，CANCELLED |
+| **已取消再支付** | **409** `ORDER_NOT_PAYABLE` |
+| **超时关单** | 订单改过期后 **9 秒**变 CLOSED（worker + beat 在服务器上真的在跑） |
+
+实际订单号：`OD20261113094849174441`（支付）、`OD20261113094849567833`（超时关闭），
+取消单在同一次运行里由脚本生成。
+
+**踩到的两个坑**
+
+1. **ACR 登录态**：服务器上的 ACR 固定密码在 2026-11-11 轮换过，旧登录态不可靠。
+   处理：`deploy` job 在部署前用 CI 的 `ACR_USERNAME`/`ACR_PASSWORD` 通过 ssh + stdin 重新 `docker login`，
+   密码不进命令行、不进日志（日志里只有 `Login Succeeded`）。
+2. **GitHub Actions 日志乱码**：脚本里中文 echo 在 runner 的 locale 下显示成 `å½å tag`。
+   部署脚本与远端 echo 标签改成 ASCII 后正常（这一条是本阶段实际返工的地方）。
+
+**首次部署的回滚限制（已知且如实记录）**：`.previous_tag=s2`，但 ACR 里没有 `web:s2` 镜像
+（S2 时代用的是 `nginx:stable` 挂载配置）。所以本次部署如果失败，脚本会拒绝自动回滚并交人工判断，
+而不是假装回滚成功。真正的回滚演练要等第二次部署产生第二个 sha。
