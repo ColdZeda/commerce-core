@@ -380,9 +380,32 @@ current=fd3b456  previous=da630e9   health ok   available 744 MB
 `env.MODE != 'check'`（push 时为空 → 执行；手动 dispatch 选 check → 跳过），
 并且核对部署不能只看 job 颜色，要看服务器上的 `.current_tag` 与实际镜像。
 
-**自动部署重跑（res:`f93e76d` 的修复提交）**
+**自动部署重跑（run 43410148563，sha `4ba508b`）**
 
-见下面"自动部署证据"一节。
+修完条件后，push 到 main 的那次推送自己把站点升上去了：
 
-回滚仍需人工决定，不会因为失败就自动切版本——脚本的自动回滚只在**本次部署失败**时触发，
-不处理"上线后才发现业务问题"。
+```
+[deploy 18:36:53] target=4ba508b current=fd3b456
+[deploy 18:36:55] pull images 4ba508b
+[deploy 18:36:56] run migrations
+[deploy 18:37:08] recreate containers
+[deploy 18:37:19] wait for health
+[deploy 18:37:21] deployed 4ba508b (previous=fd3b456 recorded in .previous_tag)
+```
+
+`部署` 步骤这次是 `success` 而不是 `skipped`，从 push 到线上换版约 2 分 30 秒（含 CI 构建镜像）。
+
+**部署后最终状态**
+
+| 项 | 值 |
+|---|---|
+| `.current_tag` | `4ba508b` |
+| `.previous_tag` | `fd3b456`（api+web 都在，回滚随时可用） |
+| 容器 | 6 个，api/web/worker/beat 都在用 `4ba508b`，mysql/redis 未换 |
+| health | `{"status":"ok","db":true,"redis":true}` |
+| 公网路由 | `/` 200、`/orders` 200、`/api/v1/products` 200、`/api/v1/orders` 401、`/admin/` 404（外网） |
+| 内存 | available **759 MB**；容器合计约 413 MiB（mysql 132 / api 103 / worker 89 / beat 67 / redis 15 / web 6） |
+
+**自动部署开启后要接受的事实**：每次 push 到 main 都会重跑 lint/test/build/push/deploy，
+一次完整链路约 3–4 分钟；文档类改动也会触发一次部署（本阶段就是如此，属于预期行为）。
+需要"只改文档不部署"时，用手动 dispatch 选 `check` 是不会部署的，但 push 一定会。
