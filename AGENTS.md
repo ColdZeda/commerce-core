@@ -88,7 +88,7 @@ cd backend && .venv\Scripts\celery -A config beat -l info
 repo/
 ├─ backend/
 │  ├─ config/    settings 分层、URL 根表、分页、异常收口、Celery 应用
-│  ├─ accounts/  登录/刷新/me，Bearer 认证与 token 错误分类
+│  ├─ accounts/  登录/刷新/me，Bearer 认证与 token 错误分类，演示账号命令 create_demo_user
 │  ├─ catalog/   商品与 SKU：模型、列表/详情接口、admin、seed_demo、tests
 │  ├─ promotion/ 券与用户券：模型、列表/领取/我的券、领券 service、并发测试
 │  ├─ trade/     订单：状态规则表、下单/取消/关单/支付 service、回调签名、关单任务、六个接口
@@ -103,7 +103,8 @@ repo/
 │                Dockerfile.web（前端静态产物）、nginx/default.conf（静态 + /api 反代 + C1）、uwsgi.ini、mysql/init
 ├─ scripts/      CI 检查脚本（check_comments.py）
 ├─ docs/         计划、修订记录、阶段记录
-└─ .github/      CI：lint + test + build/push 镜像（main 上推 ACR，sha tag）
+├─ README.md     项目说明（定位、链路、接口、本地运行、部署回滚、踩过的坑）
+└─ .github/      CI：lint + test + build/push 镜像 + 部署（push 到 main 自动部署）
 ```
 
 仓库之外（同一工作区 `E:\projects\commerce-core\`，不是 Git 仓库的一部分）：
