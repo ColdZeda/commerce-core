@@ -138,10 +138,26 @@ flowchart LR
 cp .env.example .env                      # 填 DJANGO_SECRET_KEY 与 MYSQL_*，密码自己生成
 
 docker compose -f deploy/docker-compose.yml --env-file .env up -d mysql redis
+docker compose -f deploy/docker-compose.yml --env-file .env build api     # 显式重建，避免用上旧镜像
 docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py migrate
 docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py seed_demo
 docker compose -f deploy/docker-compose.yml --env-file .env up -d api
 ```
+
+> `build api` 那一步别省：compose 只在镜像不存在时才构建，本地留着几天前的镜像就会跑到旧代码，
+> 症状是接口 404 而 `/health` 仍然 200。
+
+**本地想点「模拟支付」**：compose 里的 api 容器用的是 `config.settings.prod`（和线上一致），
+而 prod 的 `ENABLE_MOCK_PAY` 默认是 `false`，所以要在 `.env` 里加一行再重建容器：
+
+```bash
+# .env
+ENABLE_MOCK_PAY=true
+
+docker compose -f deploy/docker-compose.yml --env-file .env up -d --force-recreate api
+```
+
+直接 `runserver`（dev settings）时它默认就是开的。
 
 健康检查：`http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","db":true,"redis":true}`。
 

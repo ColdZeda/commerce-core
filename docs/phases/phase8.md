@@ -105,6 +105,22 @@
 2. Vite 8 默认只监听 `::1`，`http://127.0.0.1:5173` 会连不上，必须用 `http://localhost:5173`。
    README 原本写的就是 `localhost`，无需改动，但记在这里备查。
 
+**再往前走一步时又发现两个坑（都已回填 README）**
+
+| 现象 | 原因 | 处置 |
+|---|---|---|
+| 本地 `GET /api/v1/orders` 返回 **404**，但 `/health` 200 | compose 只在镜像不存在时构建，容器跑的是几天前的 `commerce-core-api:s0` | README 的本地步骤里加 `build api`，并说明这个症状 |
+| 前端点「模拟支付」403 | api 容器用 `config.settings.prod`，prod 的 `ENABLE_MOCK_PAY` 默认 false（dev settings 才默认 true） | README 加"本地想点支付要设 `ENABLE_MOCK_PAY=true` 再 `--force-recreate api`" |
+
+**本地完整闭环（浏览器实测）**
+
+登录 `demo` → 商品详情 → 提交订单 → 订单页出现 `OD20261113161417077277`（待支付）
+→ 点「支付」→ 确认弹窗（"这是模拟支付…"）→ 确定 → 状态变 **已支付**。
+截图：`..\assets\s8-local-orders-paid.png`、`..\assets\s8-local-checkout.png`。
+
+同时验证了本地异步链路：worker 与 beat 同时跑时，每 60 秒收到一次 `close_expired_orders`，
+返回 `{'scanned': 0, 'closed': 0, 'skipped': 0}`（本地没有过期单，属预期）。
+
 ### 6. 公网演示账号（用户决定）
 
 用户判断这是求职 demo，不需要按真实系统对待，所以采用**公开的固定口令**：`demo` / `demo1234`。
