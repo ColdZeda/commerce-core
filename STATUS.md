@@ -7,7 +7,7 @@
 **S0–S8 全部完成**。业务闭环在公网跑通，CI/CD 与回滚都演练过，README 可以直接给外部看。
 
 - 公网：`http://120.24.67.82:8080`（无域名无 HTTPS，端口 8080）
-- 线上版本：**`e74a682`**（`.current_tag`），上一版 `d18ff16`（`.previous_tag`，可回滚）
+- 线上版本：**`8339217`**（`.current_tag`），上一版 `31f1791`（`.previous_tag`，可回滚）
 - 服务器 6 个容器：api(healthy) / web / worker / beat / mysql(healthy) / redis(healthy)
 - 内存实测 available **759 MB**，容器合计约 413 MiB，未触发降级
 - 测试：**103 个用例**全过；注释密度 1.8%；CI 全绿
@@ -19,6 +19,11 @@
 2. **演示账号命令** `create_demo_user`：口令来自 `DEMO_PASSWORD` 或随机生成且只打印一次，
    幂等（已存在则跳过，`--reset` 才改），4 个用例覆盖
 3. **AGENTS/阶段文档跟上实际状态**
+4. **公网回调验收**（2026-11-14）：用服务器密钥在容器内签名，从开发机打公网入口，
+   6 种场景全过——正确签名 200、重放幂等且 `paid_at` 不变、篡改签名/金额 401、
+   超窗 401、已取消订单 409 且状态不被改回（`docs/phases/phase8.md` §7）
+5. **README 增加"项目文档"索引**：把 plan / plan-changes / phases / STATUS 链进去，
+   并列出几条真实返工，让施工过程可被检查
 
 阶段记录：`docs/phases/phase0.md` … `phase8.md`。
 
@@ -35,7 +40,7 @@
 
 ## 未验证（不许当成已完成）
 
-- `PAY_CALLBACK_SECRET` 在服务器 `.env` 里为空，回调签名回落到 `SECRET_KEY`
+- `PAY_CALLBACK_SECRET` 在服务器 `.env` 里为空，回调签名复用 `SECRET_KEY`（功能已实测，安全上不理想）
 - Django admin 的 `/static/` 没托管：内网能开页面但没有样式，业务验收不依赖它
 - 无 HTTPS / 无域名，公网明文；`ENABLE_MOCK_PAY=true` 意味着任何登录用户能把自己的订单标成已支付
 - 自动回滚只在"本次部署失败"时触发，不处理"上线后才发现业务问题"
