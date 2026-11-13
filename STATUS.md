@@ -1,13 +1,14 @@
 # STATUS
 
-> 更新于 2026-11-13（S8 收尾完成）。每轮结束、每阶段结束都更新；滚动覆盖，不追加历史。全文件目标：10 秒读完。
+> 更新于 2026-11-14（外部审查收口，修复未开始）。每轮结束、每阶段结束都更新；滚动覆盖，不追加历史。全文件目标：10 秒读完。
 
 ## 现在在哪
 
-**S0–S8 全部完成**。业务闭环在公网跑通，CI/CD 与回滚都演练过，README 可以直接给外部看。
+**S0–S8 全部完成**；业务闭环在公网跑通，CI/CD 与回滚都演练过，README 可以直接给外部看。
+另有一次**外部 AI 独立审查**收口，10 项问题全部成立，修复尚未开始（见下）。
 
 - 公网：`http://120.24.67.82:8080`（无域名无 HTTPS，端口 8080）
-- 线上版本：**`8339217`**（`.current_tag`），上一版 `31f1791`（`.previous_tag`，可回滚）
+- 线上版本：**`73f256c`**（`.current_tag`），上一版 `8339217`（`.previous_tag`，可回滚）
 - 服务器 6 个容器：api(healthy) / web / worker / beat / mysql(healthy) / redis(healthy)
 - 内存实测 available **759 MB**，容器合计约 413 MiB，未触发降级
 - 测试：**103 个用例**全过；注释密度 1.8%；CI 全绿
@@ -29,10 +30,25 @@
 
 ## 下一步
 
-**项目交付完毕。** 想继续的话：
+**外部审查的修复（未开始）。** 另一个 AI 独立审查了基线 `73f256c`，提出 R1–R10；
+我方逐项复核后**全部成立**（R4 降 P2），两轮已收口。过程与本方最终方案都在仓库外
+`..\check\`（入口 `..\check\README.md`，方案见 `..\check\RESPONSE-02.md` §2）。
 
-1. 域名 + HTTPS（现在明文 8080）；需要外部可点链接时再考虑
-2. `.env` 里补 `PAY_CALLBACK_SECRET`（现在回落 `SECRET_KEY`）
+分四批，一批一提交、一批一验证：
+
+1. **R3、R4(P2)、R2、R1**：JWT 分类改用 `ExpiredTokenError`；`sign` 限 32 字节十六进制
+   （格式错 400、签名错 401）；并发测试用 `future.result()` 收异常并断言结果数；
+   `create_order` 在 `BusinessError` 后做事务外幂等回查。补 4 组回归用例
+2. **R5、R7**：CI 上传重试耗尽要 `exit 1`；预检里 compose 校验阻断、诊断不阻断；
+   `images` 的 push 与上传步骤加 `mode != 'check'`，check 真正只读（compose 校验移到 runner 本地）
+3. **R6**：`deploy.sh` 负责备份/替换/还原 compose（CI 不再自己 `cp`）；迁移失败分支也还原；
+   同步改 `AGENTS.md` C4 与 `plan.md` 里被 D-004 取代的 grounded 表述
+4. **R8、R9、R10**：README 补 venv 初始化与本地建号、改 PowerShell 写法；phase5/plan 改重投表述；
+   README 两处措辞（`F()` 扣减、C 的边界）改正
+
+修完后只请审查方核验修复与关联回归，不再全文互审；每批都要过 `pytest -q`、`ruff`、注释密度。
+
+其余可选项（用户已明确跳过）：域名 + HTTPS、`.env` 补 `PAY_CALLBACK_SECRET`。
 
 ## 卡点
 
@@ -40,6 +56,7 @@
 
 ## 未验证（不许当成已完成）
 
+- **外部审查 R1–R10 的修复全部未开始**：代码里现在仍是审查前的行为（详见 `..\check\README.md`）
 - `PAY_CALLBACK_SECRET` 在服务器 `.env` 里为空，回调签名复用 `SECRET_KEY`（功能已实测，安全上不理想）
 - Django admin 的 `/static/` 没托管：内网能开页面但没有样式，业务验收不依赖它
 - 无 HTTPS / 无域名，公网明文；`ENABLE_MOCK_PAY=true` 意味着任何登录用户能把自己的订单标成已支付
@@ -50,7 +67,8 @@
 
 ## 接手提示（新会话读到这里就够）
 
-1. 先读 `AGENTS.md` → 本文件 → `README.md`（对外交付物）
+1. 先读 `AGENTS.md` → 本文件 → `README.md`（对外交付物）；
+   若要做审查修复，再读 `..\check\README.md` 与 `..\check\RESPONSE-02.md` §2
 2. 动服务器前读 `..\ops\runbook.md`；每次服务器操作追加到 `..\ops\server-log.md`
 3. **部署**：push 到 main 自动部署；只看不动用 GitHub Actions → Run workflow → mode `check`
 4. **回滚**：`ssh aliyun` → `cd /opt/commerce-core && ./deploy.sh <旧 sha>`
