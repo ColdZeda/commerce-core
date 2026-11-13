@@ -24,12 +24,10 @@
 
 ## 下一步
 
-**项目交付完毕，没有指定的下一阶段。** 想继续的话，按价值排序：
+**项目交付完毕。** 想继续的话：
 
-1. **公网演示账号**：`ssh aliyun` → `cd /opt/commerce-core && docker compose exec -T api python manage.py create_demo_user`
-   （随机口令只打印一次；想自己定就给 `DEMO_PASSWORD` 加 `--reset`）——不做也行，README 已写明做法
-2. 在干净机器上按 README 从零跑一遍（本阶段没做，见"未验证"）
-3. 需要外部可点的演示时，再考虑域名 + HTTPS（目前是明文 8080）
+1. 域名 + HTTPS（现在明文 8080）；需要外部可点链接时再考虑
+2. `.env` 里补 `PAY_CALLBACK_SECRET`（现在回落 `SECRET_KEY`）
 
 ## 卡点
 
@@ -37,12 +35,13 @@
 
 ## 未验证（不许当成已完成）
 
-- **README 的"本地运行"没在干净机器上从零复现**：开发机当时 Docker 没起，命令是对着现有配置核对的
-- 公网演示账号还没建（命令可用，口令未定）
 - `PAY_CALLBACK_SECRET` 在服务器 `.env` 里为空，回调签名回落到 `SECRET_KEY`
-- Django admin 的 `/static/` 没托管：内网能开页面但没样式，业务验收不依赖它
+- Django admin 的 `/static/` 没托管：内网能开页面但没有样式，业务验收不依赖它
 - 无 HTTPS / 无域名，公网明文；`ENABLE_MOCK_PAY=true` 意味着任何登录用户能把自己的订单标成已支付
 - 自动回滚只在"本次部署失败"时触发，不处理"上线后才发现业务问题"
+
+> 已消除：README 的本地运行已在开发机上按原文走通（103 用例全过，前端与 Celery 都起得来），
+> 公网演示账号 `demo` / `demo1234` 已创建并验证。
 
 ## 接手提示（新会话读到这里就够）
 

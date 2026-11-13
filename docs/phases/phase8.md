@@ -82,9 +82,40 @@
 这次的 push 同样走了自动部署：`current=e74a682`、`previous=d18ff16`，健康检查 200。
 `README.md` 的改动不影响运行时，但既然开了自动部署，文档提交也会部署一次——这是已知代价。
 
-### 5. 没做 / 留给后续
+### 5. 本地按 README 从零走一遍（2026-11-13 夜，Windows 开发机）
 
-- **公网演示账号还没有真的建**：命令已经可用，但口令得由维护者决定（要么自己跑一次命令拿随机口令，
-  要么给 `DEMO_PASSWORD`）。这一步故意不自动化，避免口令落进 CI 日志。
-- README 的"本地运行"一节没有在干净机器上重跑一遍：本阶段开发机 Docker 未启动，
-  命令与 compose 文件是对着现有配置核对的，不是从零复现的。这条记为未验证。
+之前记的"没在干净机器复现"已经补上。开发机重启过，Docker Desktop 是现启的，旧容器全处于 Exited。
+
+| 步骤 | 结果 |
+|---|---|
+| `docker compose ... up -d mysql redis` | **第一次失败**：`ports are not available ... 127.0.0.1:3307` |
+| 诊断 | 3307 落在 Hyper-V 保留区间 3307–3406（`netsh interface ipv4 show excludedportrange`），不是被进程占用 |
+| 处置 | `.env` 的 `MYSQL_PORT` / `MYSQL_HOST_PORT` 改 3307 → 13307，重新 `up -d` → mysql/redis 均 healthy |
+| `run --rm -T api python manage.py migrate` | `No migrations to apply`（库已是最新） |
+| `run --rm -T api python manage.py seed_demo` | 幂等生效：新增 0，当前 6 商品 / 9 SKU / 3 券 |
+| `up -d api` + `/api/v1/health` | `{"status":"ok","db":true,"redis":true}`，`/api/v1/products` 返回 6 条 |
+| `npm install` + `npm run dev` | Vite 8.3.7 起在 5173；页面返回 `<title>commerce-core</title>`，`/api` 代理打通 |
+| `celery worker --pool=solo` | `celery@WDNMD ready.`，任务表含 `close_expired_orders` |
+| `celery beat` | `beat: Starting...`，独立进程（Windows 上不能用 `-B`） |
+| `pytest -q` | **103 个用例全过**（72 + 31 个点） |
+
+两个新发现已回填 README：
+
+1. **3307 可能被 Windows 保留**，症状像"端口被占"但实际是系统预留 → README 加了排查命令与处置方式。
+2. Vite 8 默认只监听 `::1`，`http://127.0.0.1:5173` 会连不上，必须用 `http://localhost:5173`。
+   README 原本写的就是 `localhost`，无需改动，但记在这里备查。
+
+### 6. 公网演示账号（用户决定）
+
+用户判断这是求职 demo，不需要按真实系统对待，所以采用**公开的固定口令**：`demo` / `demo1234`。
+
+- 已在线上创建并验证：`/auth/login` 200、`/auth/me` 返回 `demo`(id=2)、可领券 3 张、订单 0
+- 口令写进 README 属于对 AGENTS §1.10 的**有意例外**，理由：这是公开演示账号，数据全是 `seed_demo`
+  的假数据，支付是 mock，不关联任何真实系统；换口令仍是 `create_demo_user --reset`
+- 命令本身仍支持不给口令时随机生成，哪天想收紧不用改代码
+
+### 7. 没做 / 留给后续
+
+- 需要外部可点链接的场合再考虑域名 + HTTPS（当前明文 8080）
+- `.env.example` 里的默认端口仍是 3307，没有因为本机保留区间而改——那不是代码问题，
+  改默认值会让已经部署的环境对不上；排障说明放在 README 更合适

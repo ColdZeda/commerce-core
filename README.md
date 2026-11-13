@@ -25,13 +25,12 @@
 | 内存实测 | 容器合计约 **413 MiB**，系统 available **759 MB** |
 | 部署方式 | push 到 main → GitHub Actions → ACR → ssh 上线 |
 
-演示账号**不存在固定口令**。要试用请让维护者用下面的命令建一个（口令不写进仓库）：
+**演示账号**：`demo` / `demo1234`
 
-```bash
-docker compose -f docker-compose.yml exec -T api python manage.py create_demo_user
-# 或不进容器：demopassword 由环境变量给，命令只建账号不打印
-DEMO_PASSWORD=... python manage.py create_demo_user --reset
-```
+这是**公开的演示账号**：数据都是 `seed_demo` 造的假数据，支付是 mock，没有真实用户信息。
+口令写在仓库里是因为它本来就要给访问者用，不是任何真实系统的凭据。
+要换口令：`DEMO_PASSWORD=新口令 python manage.py create_demo_user --reset`；
+不给 `DEMO_PASSWORD` 就随机生成并只打印一次。
 
 `/api/v1/orders` 需要登录（401），这是设计如此——订单接口不开放匿名访问。
 
@@ -164,6 +163,15 @@ cd deploy && docker compose -f docker-compose.prod.yml run --rm -T api python ma
 ```
 
 > 容器名与本地栈相同，两套不能同时起；`docker compose run` 在无 TTY 的环境必须加 `-T`。
+
+**Windows 上 MySQL 起不来？** 报 `ports are not available: ... 127.0.0.1:3307` 通常不是被别的程序占了，
+而是 3307 落在了 Hyper-V 的保留端口区间（重启后区间会变）：
+
+```powershell
+netsh interface ipv4 show excludedportrange protocol=tcp   # 看 3307 是否在列表里
+```
+
+处置：把 `.env` 的 `MYSQL_PORT` 与 `MYSQL_HOST_PORT` 一起改成区间外的端口（例如 `13307`），再 `up -d`。
 
 ---
 
