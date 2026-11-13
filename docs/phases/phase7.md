@@ -347,3 +347,28 @@ uWSGI 仍是 2 process / 2 threads、MySQL buffer pool 仍 128M。
 **首次部署的回滚限制（已知且如实记录）**：`.previous_tag=s2`，但 ACR 里没有 `web:s2` 镜像
 （S2 时代用的是 `nginx:stable` 挂载配置）。所以本次部署如果失败，脚本会拒绝自动回滚并交人工判断，
 而不是假装回滚成功。真正的回滚演练要等第二次部署产生第二个 sha。
+
+**第二次部署（run 43408763662，sha `fd3b456`）**
+
+有了第二个 sha，`.previous_tag` 才真正可用：
+
+```
+current=fd3b456  previous=da630e9   health ok   available 744 MB
+```
+
+**回滚演练（往返都验公网）**
+
+| 步骤 | 命令 | 耗时 | 结果 |
+|---|---|---|---|
+| 回滚到旧版 | `./deploy.sh da630e9` | 18:26:49 → 18:27:15（**26 秒**） | `current=da630e9`、`previous=fd3b456`，六个容器 Up，api healthy |
+| 验证旧版 | 公网 curl | — | health ok、`/` 200、`/orders` 200、`/api/v1/products` 200、`/api/v1/orders` 401、`/admin/` 404 |
+| 切回新版 | `./deploy.sh fd3b456` | 18:27:33 → 18:28:01（**28 秒**） | `current=fd3b456`、`previous=da630e9` |
+
+**回滚不是"另写一套脚本"，就是同一个 `deploy.sh` 传旧 tag**：预检会确认旧 tag 的 api+web 都在，
+不然直接拒绝——所以"回滚到不存在的版本"这条路是堵死的。
+
+**自动部署开启**
+
+`deploy` job 的 `if` 从"仅手动 dispatch"改为"main 上的 push 或手动 dispatch"。
+开启后的第一次 push 本身就是证据（见下）。回滚仍需人工决定，不会因为失败就自动切版本，
+因为脚本的自动回滚只在**本次部署失败**时触发，不处理"上线后才发现业务问题"。

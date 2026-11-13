@@ -171,13 +171,12 @@ jobs:
           echo "web: ${{ steps.web.outputs.digest }}"
 
   # 服务器侧动作全部走 ssh，不引第三方 Action。顺序：连通性 → 上传 → 预检 → 部署。
-  # 自动部署的开关就是这个 if：验证通过后改成
-  #   if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+  # main 上的 push 与手动 dispatch 都会部署（手动触发时 mode=check 可只看不动）。
   deploy:
     name: deploy
     runs-on: ubuntu-24.04
     needs: [images]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     concurrency:
       group: deploy-production
       cancel-in-progress: false
