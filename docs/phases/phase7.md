@@ -107,6 +107,19 @@
 8. **服务器 `.env` 增三个键**：`ENABLE_MOCK_PAY=true`（公网演示要能点支付）、
    `PAY_CALLBACK_SECRET`（独立于 SECRET_KEY）、`IMAGE_TAG`（部署脚本改写）。
    `.env` 仍由用户维护，CI 只读不写。
+9. **`deploy` job 默认只能手动触发**（`workflow_dispatch`，输入 `mode=check|deploy`）。
+   第一次推上去就自动部署等于拿生产做试验；先用 check 验证密钥与预检，再 deploy，
+   两次都成功后才把 `if` 改成"push 到 main 也跑"，那一次推送本身就成为"自动部署"的证据。
+10. **ACR 登录放在部署前，由 CI 通过 ssh + stdin 刷新**：阿里云固定密码 2026-11-11 轮换过，
+    服务器上的 `~/.docker/config.json` 迟早过期；不用在服务器手工 `docker login`，
+    密码走 stdin 也不进命令行与日志。
+11. **`up -d` 必须带 `--remove-orphans`**：S2 的服务叫 `nginx`，新编排叫 `web`；
+    不清孤儿容器，旧 `commerce-nginx` 会继续占着 8080，新 `commerce-web` 起不来。
+12. **回滚前先确认旧 tag 的 api 与 web 镜像都在**：只有 api 没有 web 时强行 `up -d` 会让整站 502。
+    首次从 S2 升级时这个条件必然不满足（历史版本没有 web 镜像），脚本会明确拒绝自动回滚并交给人工，
+    而不是假装回滚成功。
+13. **部署脚本放在仓库里（`deploy/deploy.sh`），由 CI 上传**：放在服务器上改会成为无人审计的漂移源；
+    进仓库才能跟着 review 和 tag 走。
 
 ## S7b 命令清单（草案，执行前再贴一次并等确认）
 

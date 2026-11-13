@@ -1,10 +1,18 @@
 name: CI
 
 # push / PR 跑 lint + test；main 上两个都绿了才构建并推镜像到 ACR。
-# 部署（ssh → migrate → up -d）在 S7b 接，见 docs/phases/phase7.md。
+# 部署默认只能手动触发（workflow_dispatch），先 check 再 deploy；
+# 首次部署验证通过后，把 deploy job 的 if 改成"push 到 main 也跑"即可自动部署。
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = 只验证连通性与预检；deploy = 真正部署"
+        type: choice
+        options: [check, deploy]
+        default: check
 
 env:
   # 仓库地址不是凭据；用户名/密码走 GitHub Secrets
@@ -121,7 +129,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: 登录 ACR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.ACR_REGISTRY }}
@@ -134,7 +142,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
           tags: ${{ env.ACR_REGISTRY }}/commerce-core/api:${{ steps.tag.outputs.sha }}
           # ACR 不认 buildx 默认附带的 OCI attestation 清单（unknown manifest class for
           # application/vnd.oci.empty.v1+json），关掉才推得上去
@@ -149,7 +157,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile.web
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
           tags: ${{ env.ACR_REGISTRY }}/commerce-core/web:${{ steps.tag.outputs.sha }}
           provenance: false
           sbom: false
@@ -161,3 +169,87 @@ jobs:
           echo "sha: ${{ steps.tag.outputs.sha }}"
           echo "api: ${{ steps.api.outputs.digest }}"
           echo "web: ${{ steps.web.outputs.digest }}"
+
+  # 服务器侧动作全部走 ssh，不引第三方 Action。顺序：连通性 → 上传 → 预检 → 部署。
+  # 自动部署的开关就是这个 if：验证通过后改成
+  #   if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+  deploy:
+    name: deploy
+    runs-on: ubuntu-24.04
+    needs: [images]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 取 sha tag
+        id: tag
+        run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: 准备 SSH 密钥
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: SSH 连通性检查（只读）
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+            "$DEPLOY_USER@$DEPLOY_HOST" 'echo SSH_OK; hostname; free -m | head -n2'
+
+      - name: 上传 compose 与部署脚本
+        run: |
+          for f in deploy/docker-compose.prod.yml:/opt/commerce-core/.docker-compose.prod.new.yml \
+                   deploy/deploy.sh:/opt/commerce-core/deploy.sh; do
+            src=${f%%:*}; dst=${f##*:}
+            for i in 1 2 3; do
+              scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+                -o StrictHostKeyChecking=accept-new "$src" "$DEPLOY_USER@$DEPLOY_HOST:$dst" && break
+              echo "scp $src 第 $i 次失败，重试"; sleep 5
+            done
+          done
+
+      - name: 预检（只读）
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" '
+              cd /opt/commerce-core || exit 1
+              docker compose -f .docker-compose.prod.new.yml config -q && echo COMPOSE_OK
+              echo "--- 当前 tag ---"; grep -E "^IMAGE_TAG=" .env || true
+              echo "--- 容器 ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
+              echo "--- 健康 ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
+              echo "--- 内存 ---"; free -m | head -n2
+            '
+
+      - name: 部署
+        if: env.MODE == 'deploy'
+        run: |
+          # 服务器上的 ACR 凭据会过期，部署前用 CI 的凭据刷新；密码走 stdin，不进命令行与日志
+          printf '%s' "$ACR_PASSWORD" | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
+            "docker login --username '$ACR_USERNAME' --password-stdin $ACR_REGISTRY"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /opt/commerce-core && cp .docker-compose.prod.new.yml docker-compose.yml && chmod +x deploy.sh && ./deploy.sh ${{ steps.tag.outputs.sha }}"
+
+      - name: 收尾检查（只读）
+        if: always()
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" '
+              cd /opt/commerce-core || exit 0
+              echo "--- tag 文件 ---"; cat .current_tag .previous_tag 2>/dev/null || true
+              echo "--- 容器 ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
+              echo "--- 健康 ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
+              echo "--- 内存 ---"; free -m | head -n2
+            ' || true
