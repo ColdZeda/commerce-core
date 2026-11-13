@@ -3,13 +3,16 @@
 # 用法：./deploy.sh <image-tag>
 #
 # 只做两件危险事：改写 .env 的 IMAGE_TAG、重建容器。其余都是预检与验证。
-# 失败时先回滚到上一版并确认站点恢复，再以非零退出——CI 只会看到一个红色结果加一段说明。
+# 失败时先回滚到上一版并确认站点恢复，再以非零退出。
+#
+# 日志一律用 ASCII：GitHub Actions 的日志在非 UTF-8 locale 下会把中文显示成乱码，
+# 出故障时正需要看清这些行。
 
 set -euo pipefail
 
 TAG="${1:-}"
 if [ -z "$TAG" ]; then
-    echo "用法: $0 <image-tag>" >&2
+    echo "usage: $0 <image-tag>" >&2
     exit 64
 fi
 
@@ -26,7 +29,7 @@ ROOT_URL=http://127.0.0.1:8080/
 STAGE=preflight
 
 log() { printf '[deploy %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
-die() { log "失败：$*"; exit 1; }
+die() { log "FAILED: $*"; exit 1; }
 
 read_env() {
     grep -E "^$1=" "$ENV_FILE" | head -n1 | cut -d= -f2-
@@ -40,15 +43,15 @@ set_env_tag() {
     fi
 }
 
-[ -f "$ENV_FILE" ] || die "$PWD 下没有 .env"
+[ -f "$ENV_FILE" ] || die "no $ENV_FILE in $PWD"
 
 REGISTRY=$(read_env ACR_REGISTRY)
-[ -n "$REGISTRY" ] || die ".env 缺少 ACR_REGISTRY"
+[ -n "$REGISTRY" ] || die "ACR_REGISTRY missing in $ENV_FILE"
 API_IMAGE="$REGISTRY/commerce-core/api"
 WEB_IMAGE="$REGISTRY/commerce-core/web"
 
 OLD_TAG=$(read_env IMAGE_TAG)
-[ -n "$OLD_TAG" ] || die ".env 缺少 IMAGE_TAG"
+[ -n "$OLD_TAG" ] || die "IMAGE_TAG missing in $ENV_FILE"
 
 # 两个镜像必须都在：只有 api 换了 tag 而 web 没有时，nginx 会去连不存在的上游
 images_exist() {
@@ -71,46 +74,46 @@ wait_healthy() {
 
 rollback() {
     local reason=$1
-    log "开始回滚：$reason"
+    log "rollback start: $reason"
 
     # 新栈还没起来过：正在跑的仍是旧容器，改回 .env 即可，不需要动容器
     if [ "$STAGE" != "up" ] && [ "$STAGE" != "verify" ]; then
         set_env_tag "$OLD_TAG"
         if wait_healthy; then
-            log "未起新栈，已把 IMAGE_TAG 改回 $OLD_TAG，现有栈健康"
+            log "no new stack was started; IMAGE_TAG restored to $OLD_TAG, running stack is healthy"
         else
-            log "未起新栈，已把 IMAGE_TAG 改回 $OLD_TAG，但现有栈健康检查未通过，需要人工查看"
+            log "no new stack was started; IMAGE_TAG restored to $OLD_TAG but running stack health check FAILED"
         fi
         return 1
     fi
 
     if ! images_exist "$OLD_TAG"; then
-        log "无法自动回滚：ACR 里没有 $OLD_TAG 的 api+web 完整镜像组"
-        log "（首次从 S2 升级时会遇到这种情况，因为历史版本没有 web 镜像）"
-        log "栈当前状态见 docker compose ps；不要在这里继续操作，交给人工决定"
+        log "cannot rollback automatically: $OLD_TAG has no complete api+web image pair in ACR"
+        log "(expected when upgrading from S2 - older tags were published before the web image existed)"
+        log "current stack state: docker compose ps - stopping here for a manual decision"
         return 2
     fi
 
     set_env_tag "$OLD_TAG"
-    "${COMPOSE[@]}" pull || log "回滚拉取镜像失败，继续尝试用本地已有镜像"
+    "${COMPOSE[@]}" pull || log "rollback pull failed, trying local images"
     "${COMPOSE[@]}" up -d --remove-orphans
     if wait_healthy; then
-        log "已回滚到 $OLD_TAG，站点恢复"
+        log "rolled back to $OLD_TAG, site is healthy again"
         return 0
     fi
-    log "回滚后仍不健康，需要人工介入"
+    log "rollback finished but health still failing, manual intervention needed"
     return 2
 }
 
 main() {
-    log "目标 tag=$TAG，当前 tag=$OLD_TAG"
+    log "target=$TAG current=$OLD_TAG"
 
     STAGE=preflight
-    images_exist "$TAG" || die "ACR 里找不到 $TAG 的 api+web 镜像，先确认 CI 的 build & push 是否成功"
+    images_exist "$TAG" || die "image $TAG not found in ACR (api+web), check build & push of this sha"
 
     for key in ENABLE_MOCK_PAY PAY_CALLBACK_SECRET; do
         if [ -z "$(read_env "$key")" ]; then
-            log "提醒：.env 里 $key 为空，相关功能（模拟支付/回调签名）会不可用"
+            log "warn: $key is empty in .env, related feature will not work"
         fi
     done
 
@@ -120,40 +123,40 @@ main() {
     set_env_tag "$TAG"
 
     STAGE=pull
-    log "拉取镜像 $TAG"
+    log "pull images $TAG"
     if ! "${COMPOSE[@]}" pull; then
-        rollback "拉取镜像失败" || true
-        die "部署 $TAG 失败：拉取镜像"
+        rollback "pull failed" || true
+        die "deploy $TAG aborted at pull"
     fi
 
     # 迁移必须先于起栈：旧代码在新库上仍要能跑（加法迁移纪律）
     STAGE=migrate
-    log "执行迁移"
+    log "run migrations"
     if ! "${COMPOSE[@]}" run --rm -T api python manage.py migrate; then
-        rollback "迁移失败" || true
-        die "部署 $TAG 失败：迁移"
+        rollback "migrate failed" || true
+        die "deploy $TAG aborted at migrate"
     fi
 
     STAGE=up
-    log "重建容器"
+    log "recreate containers"
     # --remove-orphans：S2 的 commerce-nginx 服务名已不存在，不清理会继续占着 8080
     if ! "${COMPOSE[@]}" up -d --remove-orphans; then
-        rollback "重建容器失败" || true
-        die "部署 $TAG 失败：重建容器"
+        rollback "up failed" || true
+        die "deploy $TAG aborted at up"
     fi
 
     STAGE=verify
-    log "等待健康检查"
+    log "wait for health"
     if ! wait_healthy; then
         "${COMPOSE[@]}" ps || true
         "${COMPOSE[@]}" logs --tail=40 api web || true
-        rollback "健康检查未通过" || true
-        die "部署 $TAG 失败：健康检查"
+        rollback "health check failed" || true
+        die "deploy $TAG aborted at health check"
     fi
 
     echo "$OLD_TAG" >"$PREVIOUS_FILE"
     echo "$TAG" >"$CURRENT_FILE"
-    log "部署完成：$TAG（上一版 $OLD_TAG 已记录到 $PREVIOUS_FILE）"
+    log "deployed $TAG (previous=$OLD_TAG recorded in $PREVIOUS_FILE)"
     "${COMPOSE[@]}" ps
 }
 

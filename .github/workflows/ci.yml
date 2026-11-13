@@ -225,10 +225,10 @@ jobs:
             -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" '
               cd /opt/commerce-core || exit 1
               docker compose -f .docker-compose.prod.new.yml config -q && echo COMPOSE_OK
-              echo "--- 当前 tag ---"; grep -E "^IMAGE_TAG=" .env || true
-              echo "--- 容器 ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
-              echo "--- 健康 ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
-              echo "--- 内存 ---"; free -m | head -n2
+              echo "--- current tag ---"; grep -E "^IMAGE_TAG=" .env || true
+              echo "--- containers ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
+              echo "--- health ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
+              echo "--- memory ---"; free -m | head -n2
             '
 
       - name: 部署
@@ -248,8 +248,8 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" '
               cd /opt/commerce-core || exit 0
-              echo "--- tag 文件 ---"; cat .current_tag .previous_tag 2>/dev/null || true
-              echo "--- 容器 ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
-              echo "--- 健康 ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
-              echo "--- 内存 ---"; free -m | head -n2
+              echo "--- tag files ---"; cat .current_tag .previous_tag 2>/dev/null || true
+              echo "--- containers ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
+              echo "--- health ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
+              echo "--- memory ---"; free -m | head -n2
             ' || true
