@@ -231,7 +231,8 @@ jobs:
             '
 
       - name: 部署
-        if: env.MODE == 'deploy'
+        # push 触发时 inputs.mode 是空的，所以不能写成 == 'deploy'，否则整步被跳过、job 还是绿的
+        if: env.MODE != 'check'
         run: |
           # 服务器上的 ACR 凭据会过期，部署前用 CI 的凭据刷新；密码走 stdin，不进命令行与日志
           printf '%s' "$ACR_PASSWORD" | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \

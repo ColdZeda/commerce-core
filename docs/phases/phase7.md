@@ -370,5 +370,19 @@ current=fd3b456  previous=da630e9   health ok   available 744 MB
 **自动部署开启**
 
 `deploy` job 的 `if` 从"仅手动 dispatch"改为"main 上的 push 或手动 dispatch"。
-开启后的第一次 push 本身就是证据（见下）。回滚仍需人工决定，不会因为失败就自动切版本，
-因为脚本的自动回滚只在**本次部署失败**时触发，不处理"上线后才发现业务问题"。
+
+开启后的第一次 push（`f93e76d`，run 43409327360）**看起来是绿的，其实什么都没做**：
+`部署` 步骤的条件写的是 `env.MODE == 'deploy'`，而 push 触发时 `inputs.mode` 为空，
+于是该步骤被 `skipped`，整个 job 依然报 success——从拉镜像到"部署完成"只花了 25 秒，
+服务器上的 `.current_tag` 还停在前一个 sha。
+
+这是典型的假绿：**步骤级 skipped 不会让 job 变红**。修法是把条件改成
+`env.MODE != 'check'`（push 时为空 → 执行；手动 dispatch 选 check → 跳过），
+并且核对部署不能只看 job 颜色，要看服务器上的 `.current_tag` 与实际镜像。
+
+**自动部署重跑（res:`f93e76d` 的修复提交）**
+
+见下面"自动部署证据"一节。
+
+回滚仍需人工决定，不会因为失败就自动切版本——脚本的自动回滚只在**本次部署失败**时触发，
+不处理"上线后才发现业务问题"。
