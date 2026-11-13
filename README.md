@@ -287,7 +287,24 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 
 ---
 
-## 11. 如果被问到
+## 11. 项目文档（施工过程也算交付物）
+
+| 文件 | 内容 |
+|---|---|
+| [`docs/plan.md`](docs/plan.md) | 施工基线：范围、硬性约束 C1–C8、阶段与门槛、内存预算与降级顺序 |
+| [`docs/plan-changes.md`](docs/plan-changes.md) | 每次改计划的"之前／现在"，含一次失败分支的重写（部署失败不再切到另一个项目，改为回滚上一版） |
+| [`docs/phases/`](docs/phases) | `phase0.md` … `phase8.md`：每阶段的验收证据 |
+| [`STATUS.md`](STATUS.md) | 10 秒指针：现在在哪、下一步、未验证清单 |
+
+阶段文档不是"做完打个勾"：每个 `phaseN.md` 里都有实测输出、被推翻的假设和返工记录。
+几个真实例子——
+
+- A/B/C 三方案的并发数字与"为什么不能直接比 p99"（`phase4.md`）
+- 停 worker、停 Redis 再恢复的行为记录，不写"必丢/绝不丢"（`phase5.md`）
+- ACR 拒收 buildx attestation、CI 里"步骤 skipped 但 job 变绿"的假绿现场（`phase7.md`）
+- 照着 README 走时踩到的旧镜像 404、mock 支付 403（`phase8.md`）
+
+## 12. 如果被问到
 
 - **为什么明细要快照**：历史订单不能因为改价/下架而变。
 - **为什么唯一约束不够**：唯一索引解决"同一个 key 只能有一行"，解决不了"总量不能被超发"，

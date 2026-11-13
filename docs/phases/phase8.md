@@ -130,8 +130,42 @@
   的假数据，支付是 mock，不关联任何真实系统；换口令仍是 `create_demo_user --reset`
 - 命令本身仍支持不给口令时随机生成，哪天想收紧不用改代码
 
-### 7. 没做 / 留给后续
+### 7. 公网回调验收（2026-11-14 01:37，真实签名）
+
+之前 `/payments/callback` 只有测试覆盖，没在公网真发过带签名的请求。这次用**服务器自己的密钥**
+在容器内签名（密钥不出服务器），再从开发机把请求打到公网入口：
+
+| # | 场景 | 结果 |
+|---|---|---|
+| 1 | 正确签名（新订单 `OD20261113173740177433`，`amount=399.00`） | 200，`status=1`(PAID)，`idempotent=false` |
+| 2 | 同一请求重放 | 200，`idempotent=true`，`paid_at` 与第一次完全一致 |
+| 3 | 篡改 `sign` | **401** `PAY_SIGN_INVALID` / "签名校验失败" |
+| 4 | 篡改 `amount`（399.00 → 0.01，签名不变） | **401** `PAY_SIGN_INVALID` |
+| 5 | `timestamp` 取当前 -400 秒（超出 ±300 窗口） | **401** `PAY_SIGN_INVALID` / "回调时间超出允许范围" |
+| 6 | 已取消订单（`OD20261113173841360241`）发正确签名回调 | **409** `ORDER_NOT_PAYABLE`，订单仍是 CANCELLED、`paid_at` 为空 |
+
+第 5 条能成立说明时间窗在签名校验**之前**判，过期请求不会白算一次 HMAC；
+第 6 条说明状态校验在签名之后、且不会把终态改回去。
+
+签名脚本放在 `.scratch/sign_callback.py`（不进 Git），执行方式：
+
+```bash
+docker compose -f docker-compose.yml exec -T -e PYTHONPATH=/app api \
+  python /tmp/sign_callback.py <order_no> <trade_no> <amount> [offset_seconds]
+```
+
+`PYTHONPATH=/app` 是必须的：脚本放在 `/tmp`，不加这个变量会 `ModuleNotFoundError: config`。
+
+### 8. README 增加"项目文档"索引
+
+把 `docs/plan.md`、`docs/plan-changes.md`、`docs/phases/`、`STATUS.md` 链进去，
+并列出几条真实返工（ACR attestation、CI 假绿、乐观锁卖不完、照 README 走的两个坑），
+让"过程"本身可被检查，而不是只留一句"已完成"。
+
+### 9. 没做 / 留给后续
 
 - 需要外部可点链接的场合再考虑域名 + HTTPS（当前明文 8080）
 - `.env.example` 里的默认端口仍是 3307，没有因为本机保留区间而改——那不是代码问题，
   改默认值会让已经部署的环境对不上；排障说明放在 README 更合适
+- 用户明确跳过的可选项：仓库 homepage 未填、`s8` tag 未挪到 HEAD、`.scratch/` 临时文件未清理、
+  admin 静态样式未处理
