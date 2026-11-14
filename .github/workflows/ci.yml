@@ -194,8 +194,12 @@ jobs:
         run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: 校验 compose（runner 本地）
-        # 语法问题在 runner 上就挡住，不必等服务器预检；check 模式下服务器上可能还没有新文件
-        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod.example config -q
+        # 语法问题在 runner 上就挡住，不必等服务器预检；check 模式下服务器上可能还没有新文件。
+        # 服务里有 env_file: .env，而 .env 不进仓库，所以在 checkout 里造一个空的占位；
+        # 变量插值仍用 --env-file 指定的模板。
+        run: |
+          : > deploy/.env
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod.example config -q
 
       - name: 准备 SSH 密钥
         run: |
