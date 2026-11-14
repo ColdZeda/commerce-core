@@ -1,8 +1,7 @@
 name: CI
 
-# push / PR 跑 lint + test；main 上两个都绿了才构建并推镜像到 ACR。
-# 部署默认只能手动触发（workflow_dispatch），先 check 再 deploy；
-# 首次部署验证通过后，把 deploy job 的 if 改成"push 到 main 也跑"即可自动部署。
+# push / PR 跑 lint + test；main 上两个都绿了才构建并推镜像到 ACR，随后自动部署。
+# 手动触发时 mode=check 只做只读检查（不推镜像、不写服务器），mode=deploy 才真正部署。
 on:
   push:
   pull_request:
@@ -142,7 +141,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile
-          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && inputs.mode != 'check' }}
           tags: ${{ env.ACR_REGISTRY }}/commerce-core/api:${{ steps.tag.outputs.sha }}
           # ACR 不认 buildx 默认附带的 OCI attestation 清单（unknown manifest class for
           # application/vnd.oci.empty.v1+json），关掉才推得上去
@@ -157,7 +156,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile.web
-          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && inputs.mode != 'check' }}
           tags: ${{ env.ACR_REGISTRY }}/commerce-core/web:${{ steps.tag.outputs.sha }}
           provenance: false
           sbom: false
@@ -194,6 +193,10 @@ jobs:
         id: tag
         run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: 校验 compose（runner 本地）
+        # 语法问题在 runner 上就挡住，不必等服务器预检；check 模式下服务器上可能还没有新文件
+        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod.example config -q
+
       - name: 准备 SSH 密钥
         run: |
           install -m 700 -d ~/.ssh
@@ -207,15 +210,21 @@ jobs:
             "$DEPLOY_USER@$DEPLOY_HOST" 'echo SSH_OK; hostname; free -m | head -n2'
 
       - name: 上传 compose 与部署脚本
+        if: env.MODE != 'check'
         run: |
           for f in deploy/docker-compose.prod.yml:/opt/commerce-core/.docker-compose.prod.new.yml \
                    deploy/deploy.sh:/opt/commerce-core/deploy.sh; do
             src=${f%%:*}; dst=${f##*:}
+            uploaded=0
             for i in 1 2 3; do
-              scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
-                -o StrictHostKeyChecking=accept-new "$src" "$DEPLOY_USER@$DEPLOY_HOST:$dst" && break
+              if scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+                -o StrictHostKeyChecking=accept-new "$src" "$DEPLOY_USER@$DEPLOY_HOST:$dst"; then
+                uploaded=1; break
+              fi
               echo "scp $src 第 $i 次失败，重试"; sleep 5
             done
+            # 重试耗尽必须让步骤失败：循环最后一句是 sleep，否则整步会以 0 退出（假绿）
+            if [ "$uploaded" -ne 1 ]; then echo "scp $src 重试 3 次仍失败"; exit 1; fi
           done
 
       - name: 预检（只读）
@@ -223,11 +232,16 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" '
               cd /opt/commerce-core || exit 1
-              docker compose -f .docker-compose.prod.new.yml config -q && echo COMPOSE_OK
+              if [ -f .docker-compose.prod.new.yml ]; then
+                docker compose -f .docker-compose.prod.new.yml config -q || exit 1
+                echo COMPOSE_OK
+              else
+                echo "COMPOSE_SKIP：服务器上还没有新 compose（check 模式不写服务器）"
+              fi
               echo "--- current tag ---"; grep -E "^IMAGE_TAG=" .env || true
               echo "--- containers ---"; docker compose -f docker-compose.yml ps --format "{{.Name}} {{.Status}}" || true
-              echo "--- health ---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
-              echo "--- memory ---"; free -m | head -n2
+              echo "--- health（仅诊断）---"; curl -fsS -m 5 http://127.0.0.1:8080/api/v1/health || echo HEALTH_FAIL
+              echo "--- memory（仅诊断）---"; free -m | head -n2
             '
 
       - name: 部署
