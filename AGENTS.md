@@ -31,7 +31,7 @@
 13. **C1** `/admin/` 不暴露公网：nginx 只允许 127.0.0.1／内网网段，其余 404。
 14. **C2** 服务器最小栈含 redis；`/health` 必须校验 redis，不许改成"可选"。
 15. **C3** 超时链：`innodb_lock_wait_timeout=10` < `harakiri=30` < nginx `uwsgi_read_timeout=35`。
-16. **C4** 部署失败分支：停 commerce → 起 grounded → 验证页面 → 再报错退出。
+16. **C4** 部署失败分支：回滚到上一版镜像与 compose → 验证 `/api/v1/health` 与首页 → 仍不健康就停下报错、交人工判断；不把 8080 空着，也不再拉回 grounded（D-004）。
 17. **C5** `order_no` 规则写明格式＋唯一索引＋冲突重试一次；`client_token` 每次进结算页生成、下单成功后失效；捕获唯一冲突后的回查必须在 `atomic` 块**之外**。
 18. **C6** 下单顺序：锁 SKU（同时取价）→ 校验库存 → 算总额 → 校验券门槛 → 核销券 → 扣减 → 写单。
 19. **C7** S0 的 CI 只跑 lint + test；build／push／deploy 到 S7 再接。

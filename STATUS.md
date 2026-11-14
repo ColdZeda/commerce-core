@@ -44,8 +44,9 @@
 2. **✅ R5、R7 已修**（本地提交，未推送；验证记录 `..\check\FIX-02.md`）：
    上传重试耗尽 `exit 1`；预检的 compose 校验 `|| exit 1`（健康与内存只诊断）；
    check 模式不推镜像、不写服务器，compose 语法校验移到 runner 本地
-3. **⬜ R6**：`deploy.sh` 负责备份/替换/还原 compose（CI 不再自己 `cp`）；迁移失败分支也还原；
-   同步改 `AGENTS.md` C4 与 `plan.md` 里被 D-004 取代的 grounded 表述
+3. **✅ R6 已修**（本地提交，未推送；验证记录 `..\check\FIX-03.md`）：
+   CI 不再自己 `cp` compose，改由 `deploy.sh` 校验→备份→替换，回滚时连同 tag 一起还原；
+   `AGENTS.md` C4 与 plan 的 grounded 表述按 D-004 改准（新增 D-007 记录）
 4. **⬜ R8、R9、R10**：README 补 venv 初始化与本地建号、改 PowerShell 写法；phase5/plan 改重投表述；
    README 两处措辞（`F()` 扣减、C 的边界）改正
 
@@ -59,7 +60,7 @@
 
 ## 未验证（不许当成已完成）
 
-- **外部审查 R6、R8–R10 的修复未开始**；R1–R7 已修并本地验证，但**未推送、未部署**（线上仍是旧行为）
+- **外部审查 R8–R10 的修复未开始**；R1–R7 已修并本地验证，但**未推送、未部署**（线上仍是旧行为）
 - `PAY_CALLBACK_SECRET` 在服务器 `.env` 里为空，回调签名复用 `SECRET_KEY`（功能已实测，安全上不理想）
 - Django admin 的 `/static/` 没托管：内网能开页面但没有样式，业务验收不依赖它
 - 无 HTTPS / 无域名，公网明文；`ENABLE_MOCK_PAY=true` 意味着任何登录用户能把自己的订单标成已支付

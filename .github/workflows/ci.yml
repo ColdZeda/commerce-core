@@ -254,7 +254,7 @@ jobs:
             "docker login --username '$ACR_USERNAME' --password-stdin $ACR_REGISTRY"
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd /opt/commerce-core && cp .docker-compose.prod.new.yml docker-compose.yml && chmod +x deploy.sh && ./deploy.sh ${{ steps.tag.outputs.sha }}"
+            "cd /opt/commerce-core && chmod +x deploy.sh && ./deploy.sh ${{ steps.tag.outputs.sha }}"
 
       - name: 收尾检查（只读）
         if: always()

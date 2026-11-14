@@ -84,6 +84,18 @@
 - **B 的重试预算仍是 3 次**（plan §6.2 的初始值），但报告里额外跑了一组"10 次重试"作对照：
   3 次在 50 并发热点下成交率过低，没有这组对照，读者无法判断"卖不完"是方案问题还是预算问题。
 
+## D-007 compose 的备份与替换移入部署脚本（2026-11-14）
+
+- **CI 不再 `cp` compose**。之前 CI 在调用 `deploy.sh` 之前就把 `.docker-compose.prod.new.yml`
+  覆盖成 `docker-compose.yml`，脚本再备份也只会备份到新文件；回滚又只改 `IMAGE_TAG`，
+  于是"新 compose 本身有问题"时，回滚会拿坏配置把旧镜像再起一遍（外部审查 R6）。
+  现在 CI 只上传新文件，`deploy.sh` 在预检通过后 `swap_compose`：校验新文件 →
+  `cp -p docker-compose.yml docker-compose.yml.bak` → 替换；`rollback()` 第一步 `restore_compose`，
+  迁移失败、起栈失败、健康检查失败三条分支都同时还原 compose 与 tag。
+- **C4 的失败分支按 D-004 落地**。AGENTS 里还留着"停 commerce → 起 grounded"的旧流程，
+  现在写成实际实现：回滚到上一版镜像与 compose → 验证健康 → 仍不健康就停下报错交人工。
+  plan §10.2 与 §11 的 S2/S7 门槛同步去掉"切回 grounded"，改为"让出 8080 不再启回"。
+
 
 
 

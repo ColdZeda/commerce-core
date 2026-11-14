@@ -373,10 +373,10 @@ JWT 使用 localStorage + 短 access，不启用 blacklist。明确代价：有 
 2. 停止旧栈全部容器（web、worker、定时任务等）。
 3. `docker ps` 确认无旧容器/端口映射，`ss -ltnp` 确认目标端口无残留监听。
 4. 启动新栈，执行健康检查及业务冒烟。
-5. 切回时反向执行，确认 grounded-qa 页面/API 和数据恢复。
+5. 按 D-004，grounded-qa 已停用：只让它让出 8080，不再启回，数据卷保留。
 6. 永不执行 `docker system prune --volumes`、`docker volume prune` 等可能误删数据的命令。
 
-Compose 切换不等于备份。S2 若切回失败，立即暂停后续服务器操作，恢复 grounded-qa 并重新让用户决定，不得强行继续。
+Compose 切换不等于备份。S2 起栈失败时暂停后续服务器操作，按 C4 回滚或停下交用户决定，不得强行继续；D-004 之后不存在"切回 grounded"这一步。
 
 ### 10.3 内存预算和降级
 
@@ -439,12 +439,12 @@ uWSGI 锁定经过验证的具体版本，不写“必须 2.0.24+”的错误前
 |---|---|---|
 | **S0 基线** | 顶级目录与 repo、AGENTS/README/阶段文档、Django/Vite 官方骨架、MySQL/Redis Compose、配置与 `.env.example`、health、ruff/pytest、CI 初线、驱动与 uWSGI 实测 | `compose up` 后 health 的 db/redis 为 true；Windows 可连 MySQL；Linux 镜像中 uWSGI 实际启动；CI 绿；依赖锁版本；不写业务代码抢跑 |
 | **S1 商品/SKU** | 六表模型与迁移、admin、商品列表/详情、seed、索引和查询检查 | 商品可浏览；分页/筛选正确；迁移可重复执行；列表无 N+1（用 assertNumQueries 实证）；admin 可维护价格库存 |
-| **S2 登录/券 + 公网冒烟** | JWT login/refresh/me、券列表/领取/我的、领券并发约束、前端登录与券入口、401 单飞；最小 mysql/api/nginx 上服务器 | 重复领券/超发有正确业务码；刷新页面不掉登录；**并发领券测试通过**；停 grounded→部署→外网可达→记录内存→停 commerce→切回 grounded 并验证恢复；不测尚未完成的下单 |
+| **S2 登录/券 + 公网冒烟** | JWT login/refresh/me、券列表/领取/我的、领券并发约束、前端登录与券入口、401 单飞；最小 mysql/api/nginx 上服务器 | 重复领券/超发有正确业务码；刷新页面不掉登录；**并发领券测试通过**；停 grounded（一次性让出 8080，不再启回，D-004）→部署→外网可达→记录内存；不测尚未完成的下单 |
 | **S3 下单主干** | A 行锁、事务、券核销、订单快照、client_token、订单列表/详情/取消、四页核心链路 | 下单金额/库存正确；改价不影响历史订单；同 token 并发只一单且重放可返回；取消只回补一次；规则表和回归测试绿 |
 | **S4 库存深挖** | B 对照、A/B/C 实验边界、真实 MySQL 并发、C 的真实 Redis/Lua/补偿/对账、实验报告 | 守恒/成功订单/错误码断言全过；保护被故意破坏时测试能红；C 全部实验进 CI；A/B 完整下单与同边界扣减结果分开记录 |
 | **S5 异步关单** | worker/beat/Redis broker、共享关单 service、重试与可见性、裸版反例、停止恢复演练 | 真调度能关单；并发关闭/取消只回补一次；重复任务无副作用；worker/Redis 停止恢复行为有实测记录 |
 | **S6 模拟支付** | `/pay` 和 `/callback` 共用 mark_order_paid、HMAC/时间戳、状态校验 | 重复支付/回调只生效一次且按契约返回；CLOSED/CANCELLED 不误改；签名/金额/状态测试完整 |
-| **S7 部署与 CI/CD** | 完整 Compose、静态资源、WSL2 全栈、ACR、Actions 全链路、部署密钥、回滚 | 公网完成登录→领券→下单；分别用待支付订单验证取消/超时关单，用另一订单验证支付及 PAID 后取消被拒；一次 push 自动部署；健康检查有效；手动回滚成功；切回 grounded 仍可用 |
+| **S7 部署与 CI/CD** | 完整 Compose、静态资源、WSL2 全栈、ACR、Actions 全链路、部署密钥、回滚 | 公网完成登录→领券→下单；分别用待支付订单验证取消/超时关单，用另一订单验证支付及 PAID 后取消被拒；一次 push 自动部署；健康检查有效；手动回滚成功（镜像与 compose 一起回退） |
 | **S8 收尾** | README、架构/契约/状态机/测试/部署/压测/取舍文档、演示数据、面试讲述与四格表 | 新用户按 README 可跑通；文档数字有实测来源；能演示核心失败→修复；明确项目级而非生产级，不虚构指标 |
 
 ### 阶段依赖

@@ -2,8 +2,8 @@
 # 服务器侧部署脚本：由 CI 上传到 /opt/commerce-core/deploy.sh，再由 CI 通过 ssh 调用。
 # 用法：./deploy.sh <image-tag>
 #
-# 只做两件危险事：改写 .env 的 IMAGE_TAG、重建容器。其余都是预检与验证。
-# 失败时先回滚到上一版并确认站点恢复，再以非零退出。
+# 只做三件危险事：替换 docker-compose.yml、改写 .env 的 IMAGE_TAG、重建容器。其余都是预检与验证。
+# 失败时先把 compose 与 tag 一起回滚到上一版并确认站点恢复，再以非零退出。
 #
 # 日志一律用 ASCII：GitHub Actions 的日志在非 UTF-8 locale 下会把中文显示成乱码，
 # 出故障时正需要看清这些行。
@@ -19,6 +19,10 @@ fi
 cd "$(dirname "$0")"
 
 COMPOSE=(docker compose -f docker-compose.yml)
+COMPOSE_FILE=docker-compose.yml
+COMPOSE_NEW=.docker-compose.prod.new.yml
+COMPOSE_BAK=docker-compose.yml.bak
+SWAPPED=0
 ENV_FILE=.env
 CURRENT_FILE=.current_tag
 PREVIOUS_FILE=.previous_tag
@@ -72,9 +76,42 @@ wait_healthy() {
     return 1
 }
 
+# CI 只上传新文件，"备份旧文件 + 替换"放在这里做：谁先谁后由脚本掌握，回滚才还得了原
+swap_compose() {
+    if [ ! -f "$COMPOSE_NEW" ]; then
+        log "no $COMPOSE_NEW, keep current $COMPOSE_FILE"
+        return 0
+    fi
+    if ! docker compose -f "$COMPOSE_NEW" config -q >/dev/null 2>&1; then
+        die "invalid $COMPOSE_NEW, $COMPOSE_FILE left untouched"
+    fi
+    if [ -f "$COMPOSE_FILE" ]; then
+        cp -p "$COMPOSE_FILE" "$COMPOSE_BAK"
+    else
+        log "warn: no $COMPOSE_FILE to back up, treating this as a first install"
+    fi
+    cp "$COMPOSE_NEW" "$COMPOSE_FILE"
+    SWAPPED=1
+    log "swapped in $COMPOSE_NEW (previous saved as $COMPOSE_BAK)"
+}
+
+restore_compose() {
+    [ "$SWAPPED" = "1" ] || return 0
+    if [ -f "$COMPOSE_BAK" ]; then
+        cp -p "$COMPOSE_BAK" "$COMPOSE_FILE"
+        log "restored $COMPOSE_FILE from $COMPOSE_BAK"
+    else
+        log "warn: no $COMPOSE_BAK to restore, $COMPOSE_FILE stays on the new version"
+    fi
+    SWAPPED=0
+}
+
 rollback() {
     local reason=$1
     log "rollback start: $reason"
+
+    # compose 必须先回退：下面的 up -d 会用这个文件起栈
+    restore_compose
 
     # 新栈还没起来过：正在跑的仍是旧容器，改回 .env 即可，不需要动容器
     if [ "$STAGE" != "up" ] && [ "$STAGE" != "verify" ]; then
@@ -119,6 +156,9 @@ main() {
 
     # compose 的镜像 tag 来自 .env，所以先改 .env 再 pull，否则拉的是旧 tag。
     # 这一步之后任何失败都要把 .env 改回去，否则下次 up -d 会拿着不存在的镜像起栈。
+    STAGE=compose
+    swap_compose
+
     STAGE=prepare
     set_env_tag "$TAG"
 
