@@ -28,7 +28,8 @@
 
 - 不做支付（S6）；`PAID` 的迁移在 S6 加，本阶段只保证关单不会碰已支付订单
 - 不做 beat 的数据库 scheduler（`django-celery-beat`），定时表是静态配置
-- 不做任务重试策略的玄学调参：业务异常不重试，DB 连接类异常由 broker 重投兜底，行为以演练结果为准
+- 不做任务重试策略的玄学调参：业务异常不重试，也没有配 `autoretry_for`；任务抛错后不会自动重投，
+  恢复靠下一拍扫描（见文末勘误），行为以演练结果为准
 - 不在 Windows 上跑 prefork；演练用 `--pool=solo`，Linux 全栈留给 S7
 
 ## 门槛
@@ -63,8 +64,8 @@
 5. **关单与取消共用一个执行器**。`_apply_transition` 只认规则表里的行；两个入口的差别只有
    "谁有权限"和"是否要求已到期"，副作用不重复实现。
 6. **关闭时写 `closed_at`**，取消时写 `cancel_reason`；两列在模型里本来就有，不新增字段。
-7. **任务里不吞异常**。单笔关单失败（比如数据库异常）让任务整体抛错，由 broker 的重投兜底；
-   业务上"已取消/已支付"不是异常，返回 `None` 计入 `skipped`。
+7. **任务里不吞异常**。单笔关单失败（比如数据库异常）让任务整体抛错、留在日志里，等下一拍 beat
+   重新扫到那单再关（实际不会自动重投，见文末勘误）；业务上"已取消/已支付"不是异常，返回 `None` 计入 `skipped`。
 8. **Windows 演练用 `--pool=solo`**：plan §2.6 已写明 Windows 不跑 prefork，solo 能验证调度、
    任务执行、重投与恢复语义；线程池/进程池的差异留到 S7 的 Linux 全栈。
 
@@ -156,3 +157,24 @@ python scripts/check_lock.py     → lock=36 installed=36
    Linux 容器里可以用 `-B`，也可以拆成两个 service——S7 的 compose 里会拆。
 2. worker 启动日志里 transport 显示 `redis://:**@127.0.0.1:6379/0`、`results: disabled://`，
    与"不配 result backend"的设定一致；密码由 Celery 自己打码，日志里没有明文。
+
+## 勘误（2026-11-14）
+
+原稿在"明确不做"第 3 条与实施决定第 7 条写的都是"DB 连接类异常由 broker 重投兜底"。
+外部审查按实际加载的 Celery 5.7.0 任务属性核对了这句话，**原表述不成立**：
+
+```text
+acks_late = True            acks_on_failure_or_timeout = True
+reject_on_worker_lost = True  autoretry_for = []
+```
+
+`acks_late` + `reject_on_worker_lost` 覆盖的是"worker 丢失"这一条路径（`worker/request.py`
+对执行子进程丢失走 `reject(requeue=True)`），普通任务异常仍走确认分支，不会因为没有 `autoretry_for`
+而重新入队。所以数据库短暂失败后的恢复，实际依靠的是**下一拍 beat 重新扫到仍处于 PENDING 且已过期的订单**，
+不是原消息重投；`visibility_timeout=120` 也不是重投上界。
+
+影响与保留：订单不会因为这句话而丢（订单和 `expire_at` 在 MySQL 里，E1 的"下一拍扫到就会关"仍然成立），
+但"恢复了马上补"不成立，空窗期最长是一次扫描间隔加上停机时间。本阶段不改成有界重试——
+S5 的取舍是"少一条重试路径就少一处不确定"，要加也必须有界并只针对特定异常，那属于新的决策。
+原实验输出（E1–E5 的日志与数字）没有被改动。
+

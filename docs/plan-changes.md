@@ -96,6 +96,18 @@
   现在写成实际实现：回滚到上一版镜像与 compose → 验证健康 → 仍不健康就停下报错交人工。
   plan §10.2 与 §11 的 S2/S7 门槛同步去掉"切回 grounded"，改为"让出 8080 不再启回"。
 
+## D-008 关单异常后的恢复机制写准（2026-11-14）
+
+- **删除"DB 连接类异常有限重试并指数退避"**。plan §7.1 原来这么写，但 `tasks.py` 从未配过
+  `autoretry_for`；实际加载的 Celery 5.7.0 属性是 `acks_late=True`、
+  `acks_on_failure_or_timeout=True`、`reject_on_worker_lost=True`、`autoretry_for=[]`。
+  `acks_late` 与 `reject_on_worker_lost` 只覆盖"worker 丢失"，普通任务异常仍走确认分支，不重新入队。
+  现在 plan 与 phase5 都写成：任务异常不重投，恢复靠下一拍 beat 重新扫到仍未关闭的订单；
+  phase5 末尾加了勘误段落，原始实验输出未改。
+- **不因此改成有界重试**。这是取舍：关单是分钟级扫描，补扫天然幂等，多一条重试路径就多一处不确定。
+  真要加必须有界、只针对特定异常，并单独验证。
+
+
 
 
 

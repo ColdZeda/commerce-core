@@ -25,7 +25,7 @@
 | 内存实测 | 容器合计约 **413 MiB**，系统 available **759 MB** |
 | 部署方式 | push 到 main → GitHub Actions → ACR → ssh 上线 |
 
-**演示账号**：`demo` / `demo1234`
+**演示账号**：`demo` / `demo1234`（仅线上；本地要自己建，见 §5）
 
 这是**公开的演示账号**：数据都是 `seed_demo` 造的假数据，支付是 mock，没有真实用户信息。
 口令写在仓库里是因为它本来就要给访问者用，不是任何真实系统的凭据。
@@ -52,7 +52,7 @@ flowchart LR
 
 ```
 锁 SKU 行（同时取价） → 校验库存 → 算总额 → 校验券门槛
-→ 核销券 → F() 扣减库存 → 写订单 + 明细快照
+→ 核销券 → 扣减库存（行已锁，改对象后 save；`F()` 只用在回补）→ 写订单 + 明细快照
 ```
 
 **关单是异步的**：beat 每分钟投递任务，worker 扫出过期订单，每单走和"用户取消"完全相同的 service。
@@ -93,9 +93,11 @@ flowchart LR
 | A 完整下单 | 100 | `STOCK_NOT_ENOUGH`×100 | 0 | 475 ms | 733 ms | 765 ms |
 | B 完整下单（单 SKU 无券） | 13 | `RETRY_EXHAUSTED`×187 | 87 | 361 ms | 455 ms | 462 ms |
 
-两条口径必须分开看：
+三条边界别混着比：
 
-- **C 只做一次 EVAL 预扣**，A/B 是完整下单事务，直接比 p99 是错的；
+- **边界不同**：C 只做一次 EVAL 预扣；A/B 的"单 SKU 扣减"只比扣减本身；A/B 的"完整下单"才含
+  锁、券与建单（B 那行还是单 SKU 无券）。
+- **只能同边界横比**：拿 C 的预扣 p99 去比 A/B 的完整下单事务是错的。
 - **B 的"卖不完"** 是有限重试的必然结果，不是 bug。热点场景下它换来的是不排队等锁。
 
 复现：`cd backend && python -m stocklab.bench`（只出原始数字，不出 QPS）。
@@ -134,6 +136,17 @@ flowchart LR
 
 前置：Python 3.12、Node 24、Docker Desktop。
 
+后端依赖装在本机 venv 里——后面本地跑 `manage.py`、跑 Celery 都从这里出：
+
+```powershell
+cd backend
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+cd ..
+```
+
+起最小栈并灌演示数据：
+
 ```bash
 cp .env.example .env                      # 填 DJANGO_SECRET_KEY 与 MYSQL_*，密码自己生成
 
@@ -146,6 +159,19 @@ docker compose -f deploy/docker-compose.yml --env-file .env up -d api
 
 > `build api` 那一步别省：compose 只在镜像不存在时才构建，本地留着几天前的镜像就会跑到旧代码，
 > 症状是接口 404 而 `/health` 仍然 200。
+
+**建一个能登录的账号**：`seed_demo` 只造商品与券，不造用户（新库上 users=0），
+所以不建号就到不了登录之后的页面。
+
+```powershell
+cd backend
+$env:DEMO_PASSWORD = "demo1234"           # 不设就随机生成、只打印这一次
+.venv\Scripts\python manage.py create_demo_user
+cd ..
+```
+
+> 线上那个 `demo` / `demo1234` 是同一条命令在服务器上建的，口令与本地无关：
+> 本地口令就是上面 `DEMO_PASSWORD` 给的值。命令幂等，账号已存在会跳过，改口令要加 `--reset`。
 
 **本地想点「模拟支付」**：compose 里的 api 容器用的是 `config.settings.prod`（和线上一致），
 而 prod 的 `ENABLE_MOCK_PAY` 默认是 `false`，所以要在 `.env` 里加一行再重建容器：

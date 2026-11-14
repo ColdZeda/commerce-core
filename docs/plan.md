@@ -267,7 +267,9 @@ C 要解释“扣了没落库”的窗口：Redis 成功而进程崩溃/DB 失�
 
 初始配置：`task_acks_late=True`、`worker_prefetch_multiplier=1`、`task_reject_on_worker_lost=True`、`task_ignore_result=True`、soft/hard time limit 50/60、`broker_connection_retry_on_startup=True`、时区显式对齐。
 
-`visibility_timeout` 必须根据任务及调度语义分析后配置，不能盲抄 600；记录为什么选它。业务异常不重试，DB 连接类异常有限重试并指数退避。任务至少一次投递，所有副作用必须幂等。
+`visibility_timeout` 必须根据任务及调度语义分析后配置，不能盲抄 600；记录为什么选它。任务至少一次投递，所有副作用必须幂等。
+当前实现**不配** `autoretry_for`：任务异常不重投，恢复靠下一拍 beat 扫到仍未关闭的订单（phase5 勘误）；
+如果以后要加重试，必须有界、只针对特定异常，并单独验证。
 
 ### 7.2 Redis broker 四个必须留下的决策与验证
 
