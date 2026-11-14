@@ -3,12 +3,21 @@
 import json
 from datetime import timedelta
 
+import jwt
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 pytestmark = pytest.mark.django_db
+
+FORGED_KEY = "not-the-project-signing-key-for-tests"
+
+
+def forged_token(**claims):
+    payload = {"token_type": "access", "jti": "forged", "user_id": 1, "exp": 9999999999}
+    payload.update(claims)
+    return jwt.encode(payload, FORGED_KEY, algorithm="HS256")
 
 
 @pytest.fixture
@@ -86,3 +95,27 @@ def test_refresh_with_expired_token_is_token_expired(client, user):
 
     assert response.status_code == 401
     assert response.json()["code"] == "TOKEN_EXPIRED"
+
+
+@pytest.mark.parametrize("exp", ["not-a-number", None, [], {}])
+def test_me_with_malformed_exp_is_token_invalid(client, exp):
+    response = client.get(reverse("auth-me"), HTTP_AUTHORIZATION=f"Bearer {forged_token(exp=exp)}")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "TOKEN_INVALID"
+
+
+def test_me_with_forged_expired_token_is_token_invalid(client):
+    # 未验签就读 exp，会把伪造 token 判成"过期"，前端于是静默刷新而不是回登录页。
+    response = client.get(reverse("auth-me"), HTTP_AUTHORIZATION=f"Bearer {forged_token(exp=1)}")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "TOKEN_INVALID"
+
+
+@pytest.mark.parametrize("exp", ["not-a-number", None])
+def test_refresh_with_malformed_exp_is_token_invalid(client, exp):
+    response = post_json(client, "auth-refresh", {"refresh": forged_token(token_type="refresh", exp=exp)})
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "TOKEN_INVALID"

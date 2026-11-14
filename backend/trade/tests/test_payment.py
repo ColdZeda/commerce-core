@@ -117,6 +117,21 @@ def test_callback_is_idempotent(client, order):
     assert Order.objects.get(pk=order.pk).paid_at == paid_at
 
 
+@pytest.mark.parametrize(
+    "sign",
+    ["", "0" * 63, "0" * 65, "z" * 64, "中" * 64],
+    ids=["empty", "short", "long", "not-hex", "unicode"],
+)
+def test_callback_rejects_malformed_signature(client, order, sign):
+    payload = signed_payload(order)
+    payload["sign"] = sign
+
+    response = client.post(reverse("payment-callback"), payload, format="json")
+
+    assert response.status_code == 400
+    assert Order.objects.get(pk=order.pk).status == Order.Status.PENDING
+
+
 def test_callback_rejects_bad_signature(client, order):
     payload = signed_payload(order)
     payload["sign"] = "0" * 64

@@ -45,10 +45,13 @@ def create_order(
     try:
         with transaction.atomic():
             order = _create_locked(user, items, user_coupon_id, token, remark)
-    except IntegrityError as exc:
-        # 同 token 并发：赢家已提交，输家必须在事务外回查，否则读不到对方刚写入的行（C5）。
-        if token is None or CLIENT_TOKEN_INDEX not in str(exc):
+    except (BusinessError, IntegrityError) as exc:
+        if token is None:
             raise
+        # 输家拿到锁时赢家已提交，库存或券的校验会先失败，走不到唯一冲突，这里按 token 再兜一次。
+        if isinstance(exc, IntegrityError) and CLIENT_TOKEN_INDEX not in str(exc):
+            raise
+        # 回查必须在 atomic 之外，否则读不到赢家刚提交的行（C5）。
         existing = Order.objects.filter(user=user, client_token=token).first()
         if existing is None:
             raise

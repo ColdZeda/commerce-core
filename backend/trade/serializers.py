@@ -40,7 +40,8 @@ class PaymentCallbackSerializer(serializers.Serializer):
     trade_no = serializers.CharField(max_length=64)
     amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     timestamp = serializers.IntegerField()
-    sign = serializers.CharField(max_length=128)
+    # 限死 SHA-256 签名的十六进制形状：compare_digest 收到非 ASCII 字符串会抛 TypeError，匿名可触发。
+    sign = serializers.RegexField(r"^[0-9a-fA-F]{64}\Z")
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
