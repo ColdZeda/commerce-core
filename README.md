@@ -4,7 +4,7 @@
 
 **线上演示**：<http://120.24.67.82:8080>（无域名、无 HTTPS，端口 8080）
 
-重点不在功能数量，而在三件事能被证明：
+本项目只做下面三条，每条都有可复现的证据：
 
 1. **下单不超卖**——并发守恒断言，且把保护拿掉测试必须变红；
 2. **重复请求只有一个结果**——同 `client_token` 重放、重复取消、重复支付、重复回调都不产生第二次副作用；
@@ -15,7 +15,7 @@
 
 ---
 
-## 1. 线上是什么样
+## 1. 运行环境
 
 | 项 | 值 |
 |---|---|
@@ -25,7 +25,7 @@
 | 内存实测 | 容器合计约 **413 MiB**，系统 available **759 MB** |
 | 部署方式 | push 到 main → GitHub Actions → ACR → ssh 上线 |
 
-**演示账号**：`demo` / `demo1234`（仅线上；本地要自己建，见 §5）
+**演示账号**：`demo` / `demo1234`（仅线上；本地要自己建，见 §6）
 
 这是**公开的演示账号**：数据都是 `seed_demo` 造的假数据，支付是 mock，没有真实用户信息。
 口令写在仓库里是因为它本来就要给访问者用，不是任何真实系统的凭据。
@@ -36,17 +36,38 @@
 
 ---
 
-## 2. 链路与状态机
+## 2. 界面
+
+页面是 Element Plus 的默认样式，没有做视觉包装；下面三张都取自线上环境（`demo` 账号）。
+
+![商品列表与领券](docs/images/ui-products.png)
+
+**商品列表**：顶部是可领的券（剩几张、门槛多少），下面是商品卡片，价格取该商品最低在售价。
+
+![结算页](docs/images/ui-checkout.png)
+
+**结算页**：选规格、改数量、选券，金额实时算。这里选了「满 199 减 30」，应付 259；提交后 15 分钟内不支付会被关单。
+
+![订单列表](docs/images/ui-orders.png)
+
+**订单列表**：待支付、已取消、已支付三种状态并存；操作列按状态给不同入口——待支付有「支付 / 取消」，终态只剩「详情」。
+
+---
+
+## 3. 调用链路与状态机
 
 ```mermaid
 flowchart LR
-  B[Vue 3 SPA] --> N[nginx: 静态 + /api 反代]
-  N --> U[uWSGI + Django/DRF]
-  U --> M[(MySQL 8 InnoDB)]
-  CB[celery beat<br/>每 60 秒] --> R[(Redis broker)]
-  R --> W[celery worker]
-  W --> M
+  U["浏览器 / Vue 3 SPA"] -->|8080| N["web · nginx<br/>静态 + /api 反代"]
+  N -->|/api/v1| A["api · uWSGI 2×2<br/>Django + DRF"]
+  A --> MY[("mysql 8<br/>订单 / 库存 / 券")]
+  A -.->|健康检查| RD[("redis 7<br/>broker")]
+  BT["beat · 每 60 秒"] -->|投递| RD
+  RD -->|消费| W["worker · Celery"]
+  W -->|关单 / 回补| MY
 ```
+
+请求走同步链路，关单走异步链路，两条链路最后都落到同一张订单状态迁移上。
 
 **下单是同步事务**（顺序即约束 C6）：
 
@@ -55,12 +76,53 @@ flowchart LR
 → 核销券 → 扣减库存（行已锁，改对象后 save；`F()` 只用在回补）→ 写订单 + 明细快照
 ```
 
+一次下单在数据库里是这样：
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant S as 浏览器 / SPA
+  participant A as DRF · create_order
+  participant DB as MySQL
+
+  S->>A: POST /orders（带 client_token）
+  A->>DB: SELECT 查 user + client_token 的已有订单
+
+  alt 已有原单
+    DB-->>A: 命中
+    A-->>S: 200 + X-Idempotent-Replay
+  else 首次提交
+    A->>DB: BEGIN
+    A->>DB: SELECT ... FOR UPDATE（SKU 按 id 升序）
+    Note over A,DB: 持锁之后才校验库存与券门槛
+    A->>DB: 条件更新券 + 扣减库存
+    A->>DB: INSERT order + order_item（价格快照）
+    A->>DB: COMMIT
+    A-->>S: 201 + 订单详情
+  end
+```
+
 **关单是异步的**：beat 每分钟投递任务，worker 扫出过期订单，每单走和"用户取消"完全相同的 service。
 
-```text
-创建订单 → PENDING ─┬─ 用户取消 ─────────→ CANCELLED（终态，回补库存 + 退券）
-                     ├─ beat 超时(15 分钟)→ CLOSED   （终态，回补库存 + 退券）
-                     └─ /pay 或回调 ──────→ PAID     （终态，写 paid_at，无跨表副作用）
+订单只有 4 个状态、3 条合法迁移：
+
+```mermaid
+stateDiagram-v2
+  state "PENDING" as P
+  state "PAID" as PD
+  state "CANCELLED" as C
+  state "CLOSED" as CL
+
+  [*] --> P: 创建订单
+  P: 已扣库存、已核销券
+
+  P --> PD: /pay 或支付回调
+  P --> C: 用户取消
+  P --> CL: beat 超时 15 分钟
+
+  PD: 终态 · 只写 paid_at，无出口（退款不在范围内）
+  C: 终态 · 已回补库存、退券
+  CL: 终态 · 已回补库存、退券
 ```
 
 状态迁移写在 `trade/rules.py` 的一张表里，执行靠 `services._apply_transition` 的**单条条件 UPDATE**
@@ -68,7 +130,7 @@ flowchart LR
 
 ---
 
-## 3. 几个值得说的设计
+## 4. 设计取舍
 
 | 问题 | 做法 | 为什么 |
 |---|---|---|
@@ -104,7 +166,7 @@ flowchart LR
 
 ---
 
-## 4. 接口
+## 5. 接口
 
 基线 `/api/v1`，`Authorization: Bearer <access>`，JSON；金额是字符串，时间是带时区的 ISO8601；
 列表统一 `{count,next,previous,results}`；错误统一 `{code,message,detail?}`，前端只看 `code`。
@@ -132,7 +194,7 @@ flowchart LR
 
 ---
 
-## 5. 本地运行
+## 6. 本地运行
 
 前置：Python 3.12、Node 24、Docker Desktop。
 
@@ -217,7 +279,7 @@ netsh interface ipv4 show excludedportrange protocol=tcp   # 看 3307 是否在�
 
 ---
 
-## 6. 测试与 CI
+## 7. 测试与 CI
 
 ```bash
 cd backend && pytest -q                    # 全部用例，需要真实 MySQL/Redis
@@ -241,9 +303,16 @@ main push  →  build & push（api 与 web 镜像，sha tag，推 ACR）
 
 ---
 
-## 7. 部署与回滚
+## 8. 部署与回滚
 
 镜像**只在 CI 构建**（服务器 1.6 GiB 会 OOM）。服务器只 `pull` + `up -d`。
+
+```mermaid
+flowchart LR
+  CI["GitHub Actions<br/>lint → test<br/>build &amp; push"] -->|push| ACR[("ACR")]
+  ACR -.->|pull| DEP["deploy.sh（在服务器上执行）<br/>预检 → 迁移<br/>up -d → 健康检查"]
+  DEP -.->|失败| RB["回滚上一版<br/>镜像 + compose"]
+```
 
 ```bash
 # 线上当前版本
@@ -259,13 +328,13 @@ pull → migrate → up -d --remove-orphans → 60 秒内等 health 与首页都
 失败时：还没起新栈就只回滚 `.env`；已经起过就切回上一版并确认站点恢复；上一版镜像不全则**明确拒绝**
 并交人工，不假装回滚成功。
 
-实测：一次换版 26–28 秒（镜像已拉到本机时），其中站点不可用窗口更短；不宣称零停机。
+实测：一次换版 26–28 秒（镜像已拉到本机时），重建期间站点有秒级不可用。
 
 迁移纪律：**只做加法**，且先于 `up -d` 执行，旧代码必须能在新库上跑——这样回滚镜像时不用回滚数据库。
 
 ---
 
-## 8. 目录
+## 9. 目录结构
 
 ```
 backend/
@@ -283,7 +352,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 
 ---
 
-## 9. 踩过的坑（都有现场）
+## 10. 故障与处理记录
 
 | 问题 | 现象 | 处置 |
 |---|---|---|
@@ -297,7 +366,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 
 ---
 
-## 10. 边界与非目标
+## 11. 不做的与已知限制
 
 **不做**：注册、短信、第三方登录、真实支付与退款、购物车、地址簿、物流、图片上传、ES 搜索、
 完整优惠券引擎、监控告警全家桶、多机/蓝绿部署。后台只用 Django admin（`/admin/` 公网返回 404）。
@@ -313,7 +382,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 
 ---
 
-## 11. 项目文档（施工过程也算交付物）
+## 12. 项目文档
 
 | 文件 | 内容 |
 |---|---|
@@ -322,15 +391,14 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 | [`docs/phases/`](docs/phases) | `phase0.md` … `phase8.md`：每阶段的验收证据 |
 | [`STATUS.md`](STATUS.md) | 10 秒指针：现在在哪、下一步、未验证清单 |
 
-阶段文档不是"做完打个勾"：每个 `phaseN.md` 里都有实测输出、被推翻的假设和返工记录。
-几个真实例子——
+每个 `phaseN.md` 都包含实测输出、被推翻的假设和返工记录，例如：
 
 - A/B/C 三方案的并发数字与"为什么不能直接比 p99"（`phase4.md`）
 - 停 worker、停 Redis 再恢复的行为记录，不写"必丢/绝不丢"（`phase5.md`）
 - ACR 拒收 buildx attestation、CI 里"步骤 skipped 但 job 变绿"的假绿现场（`phase7.md`）
 - 照着 README 走时踩到的旧镜像 404、mock 支付 403（`phase8.md`）
 
-## 12. 如果被问到
+## 13. 常见问题
 
 - **为什么明细要快照**：历史订单不能因为改价/下架而变。
 - **为什么唯一约束不够**：唯一索引解决"同一个 key 只能有一行"，解决不了"总量不能被超发"，
