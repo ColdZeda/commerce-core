@@ -307,9 +307,12 @@ class Command(BaseCommand):
             created_products += int(product_created)
 
             if not product_created:
-                # 分类与封面是结构信息，缺了补上；已有的值不覆盖，admin 改过的保持原样。
+                # 分类、封面、详情都是结构信息，缺了补上；已有的值不覆盖，admin 改过的保持原样。
+                # 详情要补：一期只有 6 个商品、且都没写详情，不补的话商品页会显示"还没写详情"。
                 missing = {
-                    field: entry[field] for field in ("category", "cover") if not getattr(product, field)
+                    field: entry[field]
+                    for field in ("category", "cover", "description")
+                    if not getattr(product, field)
                 }
                 if missing:
                     Product.objects.filter(pk=product.pk).update(**missing)
