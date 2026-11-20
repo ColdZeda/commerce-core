@@ -59,3 +59,34 @@ def test_reset_replaces_password(monkeypatch):
     user = User.objects.get(username="demo")
     assert user.check_password("second-pw-456")
     assert not user.check_password("first-pw-123")
+
+
+def test_staff_flag_creates_admin(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSWORD", "admin-pw-123")
+
+    output = run(username="admin", staff=True)
+
+    user = User.objects.get(username="admin")
+    assert user.is_staff is True
+    assert "管理员账号" in output
+
+
+def test_plain_account_is_not_staff(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSWORD", "demo-pw-123")
+
+    run()
+
+    assert User.objects.get(username="demo").is_staff is False
+
+
+def test_staff_flag_promotes_an_existing_account_without_touching_password(monkeypatch):
+    monkeypatch.setenv("DEMO_PASSWORD", "keep-me-123")
+    run(username="promote")
+
+    output = run(username="promote", staff=True)
+
+    user = User.objects.get(username="promote")
+    # 只补权限，口令不动：不该为了进后台逼人改口令。
+    assert user.is_staff is True
+    assert user.check_password("keep-me-123")
+    assert "已补成管理员" in output
