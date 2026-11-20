@@ -48,6 +48,38 @@ def test_checkout_creates_order_from_cart_and_clears_it(auth_client, buyer):
     assert CartItem.objects.filter(user=buyer).count() == 0
 
 
+def test_only_selected_lines_are_ordered_and_cleared(auth_client, buyer):
+    first = make_sku_stock(price="30.00", stock=10)
+    second = make_sku_stock(price="20.00", stock=10)
+    add_to_cart(auth_client, first, qty=2)
+    add_to_cart(auth_client, second, qty=1)
+    second_row = CartItem.objects.get(sku=second)
+    auth_client.patch(reverse("cart-item-detail", args=[second_row.pk]), {"selected": False}, format="json")
+
+    response = checkout(auth_client)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["total_amount"] == "60.00"
+    assert [item["sku_code"] for item in body["items"]] == [first.sku_code]
+    # 没勾的那行留着，勾中的那行下单后被清掉。
+    remaining = CartItem.objects.get()
+    assert remaining.sku_id == second.pk
+
+
+def test_nothing_selected_is_rejected(auth_client):
+    sku = make_sku_stock(price="30.00", stock=10)
+    add_to_cart(auth_client, sku, qty=1)
+    auth_client.patch(reverse("cart-items"), {"selected": False}, format="json")
+
+    response = checkout(auth_client)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "CART_EMPTY"
+    assert Order.objects.count() == 0
+    assert CartItem.objects.count() == 1
+
+
 def test_empty_cart_is_rejected(auth_client):
     response = checkout(auth_client)
 

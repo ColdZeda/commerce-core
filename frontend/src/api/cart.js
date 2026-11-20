@@ -9,8 +9,12 @@ export function addCartItem(skuId, qty = 1) {
   return http.post('/cart/items', { sku_id: skuId, qty }).then((response) => response.data)
 }
 
-export function updateCartItem(id, qty) {
-  return http.patch(`/cart/items/${id}`, { qty }).then((response) => response.data)
+export function updateCartItem(id, patch) {
+  return http.patch(`/cart/items/${id}`, patch).then((response) => response.data)
+}
+
+export function selectAllCartItems(selected) {
+  return http.patch('/cart/items', { selected }).then((response) => response.data)
 }
 
 export function removeCartItem(id) {

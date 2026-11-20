@@ -25,7 +25,7 @@ const submitting = ref(false)
 // 进页面生成一次；提交成功换新的，失败保留，让重试能被识别成重放。
 const clientToken = ref(newClientToken())
 
-const hasUnavailable = computed(() => cart.items.some((item) => !item.available))
+const hasUnavailable = computed(() => cart.blocked)
 
 async function changeQty(item, qty) {
   if (qty < 1) {
@@ -36,6 +36,22 @@ async function changeQty(item, qty) {
   } catch (error) {
     const code = error?.response?.data?.code
     ElMessage.warning(ORDER_ERRORS[code] || '改数量失败')
+    await cart.load()
+  }
+}
+
+async function toggle(item, selected) {
+  try {
+    await cart.setSelected(item.id, selected)
+  } catch {
+    await cart.load()
+  }
+}
+
+async function toggleAll(selected) {
+  try {
+    await cart.setAllSelected(selected)
+  } catch {
     await cart.load()
   }
 }
@@ -101,6 +117,14 @@ async function checkout() {
     <template v-else>
       <div class="cart-list">
         <div class="cart-row cart-row-head">
+          <span class="cart-check">
+            <el-checkbox
+              :model-value="cart.allSelected"
+              :indeterminate="cart.someSelected"
+              @change="toggleAll"
+            />
+            <span>全选</span>
+          </span>
           <span>商品</span>
           <span>单价</span>
           <span>数量</span>
@@ -111,8 +135,15 @@ async function checkout() {
           v-for="item in cart.items"
           :key="item.id"
           class="cart-row"
-          :class="{ off: !item.available }"
+          :class="{ off: !item.available, dim: !item.selected }"
         >
+          <span class="cart-check">
+            <el-checkbox
+              :model-value="item.selected"
+              :disabled="!item.available"
+              @change="(value) => toggle(item, value)"
+            />
+          </span>
           <div class="cart-product">
             <RouterLink
               class="cart-thumb"
@@ -147,6 +178,7 @@ async function checkout() {
               :model-value="item.qty"
               :min="1"
               :max="Math.min(item.stock, 999)"
+              :disabled="!item.available"
               size="small"
               @change="(value) => changeQty(item, value)"
             />
@@ -162,15 +194,18 @@ async function checkout() {
       </div>
 
       <div class="cart-summary">
-        <span class="cart-total">合计：<strong class="money">¥{{ moneyText(cart.totalAmount) }}</strong></span>
+        <span class="cart-total">
+          已选 {{ cart.selectedQty }} 件，合计
+          <strong class="money">¥{{ moneyText(cart.selectedAmount) }}</strong>
+        </span>
         <el-button
           type="primary"
           size="large"
           :loading="submitting"
-          :disabled="hasUnavailable"
+          :disabled="hasUnavailable || cart.selectedQty === 0"
           @click="checkout"
         >
-          {{ hasUnavailable ? '先处理不可售商品' : '去结算' }}
+          {{ hasUnavailable ? '先取消勾选不可售商品' : '去结算' }}
         </el-button>
       </div>
     </template>

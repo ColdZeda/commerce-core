@@ -45,17 +45,28 @@ def add_item(user, sku: SKU, qty: int) -> CartItem:
             return item
 
 
-def update_qty(user, item_id: int, qty: int) -> CartItem:
-    """改数量；抛 BusinessError：NOT_FOUND / PRODUCT_OFF_SHELF / STOCK_NOT_ENOUGH。"""
+def update_item(user, item_id: int, qty: int | None = None, selected: bool | None = None) -> CartItem:
+    """改数量或勾选；抛 BusinessError：NOT_FOUND / PRODUCT_OFF_SHELF / STOCK_NOT_ENOUGH。"""
     item = CartItem.objects.select_related("sku__product").filter(pk=item_id, user=user).first()
     if item is None:
         raise BusinessError("NOT_FOUND", "购物车里没有这一项", status.HTTP_404_NOT_FOUND)
-    _ensure_sellable(item.sku)
-    _ensure_within_stock(qty, item.sku)
 
-    item.qty = qty
-    item.save(update_fields=["qty", "updated_at"])
+    fields = []
+    if qty is not None:
+        _ensure_sellable(item.sku)
+        _ensure_within_stock(qty, item.sku)
+        item.qty = qty
+        fields.append("qty")
+    if selected is not None:
+        item.selected = selected
+        fields.append("selected")
+
+    item.save(update_fields=[*fields, "updated_at"])
     return item
+
+
+def set_all_selected(user, selected: bool) -> int:
+    return CartItem.objects.filter(user=user).update(selected=selected)
 
 
 def remove_item(user, item_id: int) -> None:
@@ -65,16 +76,16 @@ def remove_item(user, item_id: int) -> None:
 
 
 def cart_to_order_items(user, max_lines: int) -> list[dict]:
-    """把整车转成下单入参；空车或行数超限抛 BusinessError。"""
-    rows = CartItem.objects.filter(user=user).order_by("id")
+    """只把勾中的行转成下单入参；一条没勾就报空车，而不是下一张空单。"""
+    rows = CartItem.objects.filter(user=user, selected=True).order_by("id")
     if not rows:
-        raise BusinessError("CART_EMPTY", "购物车是空的", status.HTTP_409_CONFLICT)
+        raise BusinessError("CART_EMPTY", "购物车里没有勾选的商品", status.HTTP_409_CONFLICT)
     if rows.count() > max_lines:
         raise BusinessError("CART_TOO_MANY_LINES", f"一单最多 {max_lines} 个 SKU", status.HTTP_409_CONFLICT)
     return [{"sku_id": row.sku_id, "qty": row.qty} for row in rows]
 
 
-def clear_cart(user) -> int:
-    """下单成功后清空整车；返回删掉的行数，方便调用方断言。"""
-    deleted, _ = CartItem.objects.filter(user=user).delete()
+def clear_ordered_items(user) -> int:
+    """下单成功后只清掉已下单的（勾中的）行，没勾的留着。"""
+    deleted, _ = CartItem.objects.filter(user=user, selected=True).delete()
     return deleted

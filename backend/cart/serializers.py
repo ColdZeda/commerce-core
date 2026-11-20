@@ -29,6 +29,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_name",
             "cover",
             "qty",
+            "selected",
             "subtotal",
             "available",
         ]
@@ -45,5 +46,17 @@ class AddItemSerializer(serializers.Serializer):
     qty = serializers.IntegerField(min_value=1, max_value=999, default=1)
 
 
-class UpdateQtySerializer(serializers.Serializer):
-    qty = serializers.IntegerField(min_value=1, max_value=999)
+class UpdateItemSerializer(serializers.Serializer):
+    """改数量与改勾选分开传，一次只改一项，避免前端两个请求撞在一起。"""
+
+    qty = serializers.IntegerField(min_value=1, max_value=999, required=False)
+    selected = serializers.BooleanField(required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("至少要传 qty 或 selected")
+        return attrs
+
+
+class SelectAllSerializer(serializers.Serializer):
+    selected = serializers.BooleanField()

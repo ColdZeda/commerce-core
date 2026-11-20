@@ -11,18 +11,26 @@ from rest_framework.views import APIView
 from catalog.models import SKU
 
 from .models import CartItem
-from .serializers import AddItemSerializer, CartItemSerializer, UpdateQtySerializer
-from .services import add_item, remove_item, update_qty
+from .serializers import (
+    AddItemSerializer,
+    CartItemSerializer,
+    SelectAllSerializer,
+    UpdateItemSerializer,
+)
+from .services import add_item, remove_item, set_all_selected, update_item
 
 
 def cart_snapshot(user) -> dict:
-    """购物车全量：行、总件数、总金额，一次查询带出 SKU 与商品。"""
+    """购物车全量：行、总件数、总金额，以及"勾中的"件数与金额（结算按它算）。"""
     items = list(CartItem.objects.filter(user=user).select_related("sku__product").order_by("-id"))
     total_amount = sum((item.sku.price * item.qty for item in items), Decimal("0.00"))
+    picked = [item for item in items if item.selected]
     return {
         "items": CartItemSerializer(items, many=True).data,
         "total_qty": sum(item.qty for item in items),
         "total_amount": str(total_amount),
+        "selected_qty": sum(item.qty for item in picked),
+        "selected_amount": str(sum((item.sku.price * item.qty for item in picked), Decimal("0.00"))),
     }
 
 
@@ -43,14 +51,26 @@ class CartItemListView(APIView):
         add_item(request.user, sku, serializer.validated_data["qty"])
         return Response(cart_snapshot(request.user), status=status.HTTP_201_CREATED)
 
+    def patch(self, request):
+        """整车的全选 / 取消全选。"""
+        serializer = SelectAllSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        set_all_selected(request.user, serializer.validated_data["selected"])
+        return Response(cart_snapshot(request.user))
+
 
 class CartItemDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        serializer = UpdateQtySerializer(data=request.data)
+        serializer = UpdateItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        update_qty(request.user, pk, serializer.validated_data["qty"])
+        update_item(
+            request.user,
+            pk,
+            qty=serializer.validated_data.get("qty"),
+            selected=serializer.validated_data.get("selected"),
+        )
         return Response(cart_snapshot(request.user))
 
     def delete(self, request, pk):

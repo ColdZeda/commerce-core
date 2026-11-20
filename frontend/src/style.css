@@ -1124,11 +1124,25 @@ p {
 
 .cart-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 100px 150px 110px 70px;
+  grid-template-columns: 82px minmax(0, 1fr) 100px 150px 110px 70px;
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
+}
+
+.cart-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.cart-row.dim .cart-product,
+.cart-row.dim .cart-price,
+.cart-row.dim .cart-subtotal {
+  opacity: 0.55;
 }
 
 .cart-row:last-child {

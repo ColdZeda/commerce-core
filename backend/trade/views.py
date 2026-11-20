@@ -10,7 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from cart.services import cart_to_order_items, clear_cart
+from cart.services import cart_to_order_items, clear_ordered_items
 from common.errors import BusinessError
 from config.pagination import StandardPagination
 
@@ -72,7 +72,7 @@ class OrderListCreateView(generics.ListAPIView):
         )
         # 重放说明这批行上次已经下过单、当时就清过车，再清一次会误删后来加的东西。
         if from_cart and not replayed:
-            clear_cart(request.user)
+            clear_ordered_items(request.user)
 
         # 重放与首次创建的 body 一致，只多一个头，前端据此判断"这次没真的下单"。
         headers = {"X-Idempotent-Replay": "1"} if replayed else {}
