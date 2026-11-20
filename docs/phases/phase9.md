@@ -94,6 +94,21 @@ $ python manage.py seed_demo
 3. 机械键盘 104 键 → 立即下单 → 订单详情抽屉显示待支付；
 4. 模拟支付 → 已支付。
 
+### 上线
+
+| 项 | 结果 |
+|---|---|
+| 合并 | `main` 收到 `643049d`（`--no-ff` 合并 `phase2`），推 GitHub 与 Gitee |
+| CI | lint / test / build & push / deploy 四段全绿 |
+| 部署 | `.current_tag` 从 `5fa7903` 变 `643049d`，6 个容器全部起来，api healthy |
+| 迁移 | `deploy.sh` 自动跑了 `0002_product_category_cover_featured` |
+| 种子 | 服务器上 `seed_demo`：新增 24 个商品、补齐 6 个的分类与封面，当前 30 个 |
+| 接口 | `/api/v1/products` count=30、`is_featured=1` 8 个、`category=keyboard` 5 个、无缺封面 |
+| 静态 | `/img/products/kbd-87.svg` 200，跟着 web 镜像一起发出来 |
+
+线上用 `demo` 账号走了一遍：登录成功、首页 30 个商品、订单列表三种状态并存。
+README §2 的四张图全部换成线上实拍。
+
 ## 踩到的坑
 
 - **SVG 没有 `width/height` 只有 `viewBox`**：作为 `<img>` 加载时浏览器按 150×150 算固有尺寸。
@@ -119,4 +134,4 @@ $ python manage.py seed_demo
 
 - 购物车（S10）：卡片右下角的「+」现在就是打开详情页，不是加购；
 - 地址与物流（S11）、评论（S12）、后台与看板（S13）、退款（S14）；
-- README 的界面段落：等上线后从线上环境重新截图再改，本地开发环境的截图不作为最终图。
+- 注册与登录限流（S13）。
