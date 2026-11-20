@@ -102,8 +102,9 @@ repo/
 ├─ deploy/       docker-compose.yml（本地）、docker-compose.prod.yml（服务器同款）、Dockerfile（api）、
 │                Dockerfile.web（前端静态产物）、nginx/default.conf（静态 + /api 反代 + C1）、uwsgi.ini、mysql/init
 ├─ scripts/      CI 检查脚本（check_comments.py）
-├─ docs/         计划、修订记录、阶段记录
+├─ docs/         计划、修订记录、阶段记录、候选池（candidates.md）
 ├─ README.md     项目说明（定位、链路、接口、本地运行、部署回滚、踩过的坑）
+│                二期会大改，等 S14 之后统一重写；现在只同步事实性条目
 └─ .github/      CI：lint + test + build/push 镜像 + 部署（push 到 main 自动部署）
 ```
 
@@ -126,7 +127,7 @@ repo/
 |---|---|---|
 | `docs/plan.md` | 唯一施工基线：做什么、做成什么样、什么顺序、什么门槛 | 阶段边界、设计变更 |
 | `docs/plan-changes.md` | 对 plan 的修订记录，每条带"之前／现在"，只看它就能还原某段 | 每次改 plan |
-| `docs/candidates.md` | 人类收件箱，AI **不需要读** | 用户自己写 |
+| `docs/candidates.md` | **候选池**：明确不在范围内、但可能以后做的想法。只追加、不修改、不删，一行一条，**不是待办也不是承诺** | 用户说加才加；AI 不主动往里塞需求 |
 | `docs/phases/phaseN.md` | 单阶段执行记录与验证证据，封口后不再改 | 阶段内 |
 | `STATUS.md` | 10 秒指针：现在在哪、下一步、卡点、未验证 | 每轮 |
 
