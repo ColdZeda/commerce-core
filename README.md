@@ -1,6 +1,6 @@
 # commerce-core
 
-一个可运行、可测试、可部署的电商交易闭环：登录 → 领券 → 按 SKU 下单 → 取消 / 超时关单 → 模拟支付。
+一个可运行、可测试、可部署的电商交易闭环：注册 → 登录 → 领券 → 按 SKU 下单 → 取消 / 超时关单 → 模拟支付。
 
 **线上演示**：<http://120.24.67.82:8080>（无域名、无 HTTPS，端口 8080）
 
@@ -38,15 +38,22 @@
 
 ## 2. 界面
 
-页面是 Element Plus 的默认样式，没有做视觉包装；下面三张都取自线上环境（`demo` 账号）。
+前端是 Vue 3 + Element Plus，主题来自一组 CSS 变量（米白底 + 陶土橙 #c2410c）。
+下面三张取自本地开发环境，与线上是同一份构建产物。
 
-![商品列表与领券](docs/images/ui-products.png)
+![首页](docs/images/ui-home.png)
 
-**商品列表**：顶部是可领的券（剩几张、门槛多少），下面是商品卡片，价格取该商品最低在售价。
+**首页**：banner、六个分类入口、可领的券、热销与新品两排。商品图是随前端打包的 SVG，
+30 个商品各一张，不走上传也不外链。
 
-![结算页](docs/images/ui-checkout.png)
+![商品列表](docs/images/ui-products.png)
 
-**结算页**：选规格、改数量、选券，金额实时算。这里选了「满 199 减 30」，应付 259；提交后 15 分钟内不支付会被关单。
+**商品列表**：分类胶囊与排序按 URL 参数走，翻页和筛选都能直接分享链接；价格取该商品最低在售价。
+
+![商品详情与结算](docs/images/ui-detail.png)
+
+**商品详情**：左边封面，中间规格与描述，右边结算。
+选规格、改数量、选券，金额实时算；提交后 15 分钟内不支付会被关单，库存同时回补。
 
 ![订单列表](docs/images/ui-orders.png)
 
@@ -173,20 +180,21 @@ stateDiagram-v2
 
 | # | 方法与路径 | 鉴权 | 要点 |
 |---|---|---|---|
-| 1 | `POST /auth/login` | 匿名 | 返回 access/refresh/user |
-| 2 | `POST /auth/refresh` | 匿名 + refresh | 换新 access |
-| 3 | `GET /auth/me` | 登录 | 刷新页面恢复会话 |
-| 4 | `GET /products` | 匿名 | 分页、keyword、排序白名单 |
-| 5 | `GET /products/{id}` | 匿名 | 含 SKU 与库存 |
-| 6 | `GET /coupons` | 可选 | 登录时带 `claimed` |
-| 7 | `POST /coupons/{id}/claim` | 登录 | 201；重复/售罄 409 业务码 |
-| 8 | `GET /me/coupons` | 登录 | `status=unused/used/expired` |
-| 9 | `POST /orders` | 登录 | 201 新建；同 `client_token` 重放 200 + `X-Idempotent-Replay` |
-| 10 | `GET /orders` | 登录 | 仅本人，按状态筛选 |
-| 11 | `GET /orders/{order_no}` | 登录 | 他人订单一律 404，不泄露存在性 |
-| 12 | `POST /orders/{order_no}/cancel` | 登录 | PENDING→CANCELLED；已取消返回 200 |
-| 13 | `POST /orders/{order_no}/pay` | 登录 + `ENABLE_MOCK_PAY` | PENDING→PAID；已支付幂等 200 |
-| 14 | `POST /payments/callback` | 匿名 + HMAC | 已支付 200 + `idempotent`；CLOSED/CANCELLED 409 |
+| 1 | `POST /auth/register` | 匿名 | 201；成功即返回 token；自动发新人券；撞名/弱口令 400 |
+| 2 | `POST /auth/login` | 匿名 | 返回 access/refresh/user |
+| 3 | `POST /auth/refresh` | 匿名 + refresh | 换新 access |
+| 4 | `GET /auth/me` | 登录 | 刷新页面恢复会话 |
+| 5 | `GET /products` | 匿名 | 分页、`keyword`、`category`、`is_featured`、排序白名单 |
+| 6 | `GET /products/{id}` | 匿名 | 含 SKU 与库存 |
+| 7 | `GET /coupons` | 可选 | 登录时带 `claimed` |
+| 8 | `POST /coupons/{id}/claim` | 登录 | 201；重复/售罄 409 业务码 |
+| 9 | `GET /me/coupons` | 登录 | `status=unused/used/expired` |
+| 10 | `POST /orders` | 登录 | 201 新建；同 `client_token` 重放 200 + `X-Idempotent-Replay` |
+| 11 | `GET /orders` | 登录 | 仅本人，按状态筛选 |
+| 12 | `GET /orders/{order_no}` | 登录 | 他人订单一律 404，不泄露存在性 |
+| 13 | `POST /orders/{order_no}/cancel` | 登录 | PENDING→CANCELLED；已取消返回 200 |
+| 14 | `POST /orders/{order_no}/pay` | 登录 + `ENABLE_MOCK_PAY` | PENDING→PAID；已支付幂等 200 |
+| 15 | `POST /payments/callback` | 匿名 + HMAC | 已支付 200 + `idempotent`；CLOSED/CANCELLED 409 |
 | — | `GET /health` | 匿名 | 校验 db **与 redis**；任一不可用 503 |
 
 回调签名：`HMAC-SHA256(order_no|trade_no|amount|timestamp)`，`compare_digest` 比较，
@@ -222,8 +230,8 @@ docker compose -f deploy/docker-compose.yml --env-file .env up -d api
 > `build api` 那一步别省：compose 只在镜像不存在时才构建，本地留着几天前的镜像就会跑到旧代码，
 > 症状是接口 404 而 `/health` 仍然 200。
 
-**建一个能登录的账号**：`seed_demo` 只造商品与券，不造用户（新库上 users=0），
-所以不建号就到不了登录之后的页面。
+**建一个能登录的账号**：`seed_demo` 只造商品与券，不造用户（新库上 users=0）。
+现在可以直接在首页点「注册」自助建号，也可以预置一个演示账号：
 
 ```powershell
 cd backend
@@ -339,13 +347,14 @@ pull → migrate → up -d --remove-orphans → 60 秒内等 health 与首页都
 ```
 backend/
   config/      settings 分层（base/dev/prod）、URL 根表、分页、异常收口、Celery 应用
-  accounts/    登录/刷新/me、Bearer 认证、token 错误分类、演示账号命令
-  catalog/     商品与 SKU：模型、列表/详情、admin、seed_demo
-  promotion/   券与用户券：领取（含并发约束）、我的券
+  accounts/    注册/登录/刷新/me、Bearer 认证、token 错误分类、演示账号命令
+  catalog/     商品与 SKU：分类与封面、列表/详情、admin、seed_demo（30 个商品）
+  promotion/   券与用户券：领取（含并发约束）、我的券、新人券
   trade/       订单：状态规则表、下单/取消/关单/支付 service、回调签名、关单任务、六个接口
   stocklab/    库存实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、压测脚本（不接主流程）
   health/      就绪探针      common/  抽象模型与业务错误      scripts/  冒烟与依赖锁检查
-frontend/      Vue 3 SPA：/login、/products、/products/:id、/orders
+frontend/      Vue 3 SPA：/、/products、/products/:id、/login、/register、/orders
+               商品线稿 SVG 在 public/img/products/（30 张）
 deploy/        compose（本地/生产）、Dockerfile（api）、Dockerfile.web、nginx conf、uwsgi.ini
 docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶段证据）
 ```
@@ -368,7 +377,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 
 ## 11. 不做的与已知限制
 
-**不做**：注册、短信、第三方登录、真实支付与退款、购物车、地址簿、物流、图片上传、ES 搜索、
+**不做**：短信、第三方登录、真实支付与退款、购物车、地址簿、物流、图片上传、ES 搜索、
 完整优惠券引擎、监控告警全家桶、多机/蓝绿部署。后台只用 Django admin（`/admin/` 公网返回 404）。
 
 **明确已知的取舍**：
@@ -388,7 +397,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 |---|---|
 | [`docs/plan.md`](docs/plan.md) | 施工基线：范围、硬性约束 C1–C8、阶段与门槛、内存预算与降级顺序 |
 | [`docs/plan-changes.md`](docs/plan-changes.md) | 每次改计划的"之前／现在"，含一次失败分支的重写（部署失败不再切到另一个项目，改为回滚上一版） |
-| [`docs/phases/`](docs/phases) | `phase0.md` … `phase8.md`：每阶段的验收证据 |
+| [`docs/phases/`](docs/phases) | `phase0.md` … `phase9.md`：每阶段的验收证据 |
 | [`STATUS.md`](STATUS.md) | 10 秒指针：现在在哪、下一步、未验证清单 |
 
 每个 `phaseN.md` 都包含实测输出、被推翻的假设和返工记录，例如：

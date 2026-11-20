@@ -1,200 +1,140 @@
 <script setup>
 import { ElMessage } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
+import ProductCard from '../components/ProductCard.vue'
+import { CATEGORIES } from '../constants/categories'
 import { fetchProducts } from '../api/catalog'
-import { claimCoupon, fetchCoupons } from '../api/coupons'
-import { useAuthStore } from '../stores/auth'
 
-const auth = useAuthStore()
-const router = useRouter()
-
-const products = ref([])
-const total = ref(0)
-const loading = ref(false)
-const query = reactive({ page: 1, page_size: 6, keyword: '', ordering: '-created_at' })
-
-const coupons = ref([])
-const claimingId = ref(0)
+const PAGE_SIZE = 10
 
 const ORDERING_OPTIONS = [
-  { label: '最新', value: '-created_at' },
+  { label: '最新上架', value: '-created_at' },
   { label: '价格从低到高', value: 'price' },
   { label: '价格从高到低', value: '-price' },
 ]
 
-const CLAIM_MESSAGES = {
-  COUPON_ALREADY_CLAIMED: '你已经领过这张',
-  COUPON_SOLD_OUT: '已经被领完了',
-  COUPON_NOT_USABLE: '这张券现在不能领',
+const route = useRoute()
+const router = useRouter()
+
+const products = ref([])
+const total = ref(0)
+const loading = ref(true)
+
+const activeCategory = computed(() =>
+  typeof route.query.category === 'string' ? route.query.category : '',
+)
+const keyword = computed(() => (typeof route.query.keyword === 'string' ? route.query.keyword : ''))
+const ordering = computed(() =>
+  typeof route.query.ordering === 'string' ? route.query.ordering : '-created_at',
+)
+const page = computed(() => Number(route.query.page) || 1)
+
+const heading = computed(() => {
+  if (keyword.value) {
+    return `“${keyword.value}” 的搜索结果`
+  }
+  return CATEGORIES.find((item) => item.value === activeCategory.value)?.label || '全部商品'
+})
+
+/** 换筛选条件时回到第 1 页，只翻页时保留条件。 */
+function go(patch) {
+  router.push({ name: 'products', query: { ...route.query, page: undefined, ...patch } })
 }
 
-async function loadProducts() {
+async function load() {
   loading.value = true
   try {
     const data = await fetchProducts({
-      page: query.page,
-      page_size: query.page_size,
-      ordering: query.ordering,
-      keyword: query.keyword || undefined,
+      page: page.value,
+      page_size: PAGE_SIZE,
+      ordering: ordering.value,
+      category: activeCategory.value || undefined,
+      keyword: keyword.value || undefined,
     })
     products.value = data.results
     total.value = data.count
+  } catch (error) {
+    if (error?.response?.status === 400) {
+      ElMessage.warning('筛选条件不正确，已经重置')
+      router.replace({ name: 'products' })
+    }
   } finally {
     loading.value = false
   }
 }
 
-async function loadCoupons() {
-  const data = await fetchCoupons({ page_size: 5 })
-  coupons.value = data.results
-}
-
-function onSearch() {
-  query.page = 1
-  loadProducts()
-}
-
-function onPageChange(page) {
-  query.page = page
-  loadProducts()
-}
-
-async function claim(coupon) {
-  if (!auth.isAuthenticated) {
-    router.push({ name: 'login', query: { redirect: '/products' } })
-    return
-  }
-
-  claimingId.value = coupon.id
-  try {
-    await claimCoupon(coupon.id)
-    ElMessage.success('领取成功')
-    await loadCoupons()
-  } catch (error) {
-    const code = error?.response?.data?.code
-    ElMessage.warning(CLAIM_MESSAGES[code] || '领取失败，请稍后再试')
-  } finally {
-    claimingId.value = 0
-  }
-}
-
-onMounted(() => {
-  loadProducts()
-  loadCoupons()
-})
+watch(() => route.fullPath, load, { immediate: true })
 </script>
 
 <template>
-  <main class="page">
-    <section class="coupons">
-      <h2>可领优惠券</h2>
-      <div
-        v-if="coupons.length"
-        class="coupon-grid"
+  <div class="wrap">
+    <div class="catalog-bar">
+      <button
+        class="pill"
+        :class="{ on: !activeCategory }"
+        @click="go({ category: undefined, keyword: undefined })"
       >
-        <el-card
-          v-for="coupon in coupons"
-          :key="coupon.id"
-          shadow="never"
-          class="coupon-card"
-        >
-          <div class="coupon-main">
-            <strong>{{ coupon.name }}</strong>
-            <span class="coupon-threshold">满 ¥{{ coupon.threshold_amount }} 可用</span>
-            <span class="coupon-left">剩 {{ coupon.remaining }} 张</span>
-          </div>
-          <el-button
-            type="primary"
-            size="small"
-            :loading="claimingId === coupon.id"
-            :disabled="coupon.claimed || coupon.remaining === 0"
-            @click="claim(coupon)"
-          >
-            {{ coupon.claimed ? '已领取' : coupon.remaining === 0 ? '已抢光' : '领取' }}
-          </el-button>
-        </el-card>
-      </div>
+        全部
+      </button>
+      <button
+        v-for="category in CATEGORIES"
+        :key="category.value"
+        class="pill"
+        :class="{ on: activeCategory === category.value }"
+        @click="go({ category: category.value, keyword: undefined })"
+      >
+        {{ category.label }}
+      </button>
+      <el-select
+        :model-value="ordering"
+        class="catalog-order"
+        style="width: 148px"
+        @change="go({ ordering: $event })"
+      >
+        <el-option
+          v-for="item in ORDERING_OPTIONS"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
+      </el-select>
+      <span class="catalog-result">{{ heading }} · 共 {{ total }} 件</span>
+    </div>
+
+    <el-skeleton
+      v-if="loading"
+      :rows="6"
+      animated
+      style="margin-top: 22px"
+    />
+    <template v-else>
       <el-empty
-        v-else
-        description="暂时没有可领的券"
+        v-if="!products.length"
+        description="没有找到商品，换个词或换个分类试试"
       />
-    </section>
-
-    <section class="catalog">
-      <div class="catalog-toolbar">
-        <h2>商品</h2>
-        <el-input
-          v-model="query.keyword"
-          placeholder="搜商品名"
-          clearable
-          class="catalog-search"
-          @keyup.enter="onSearch"
-          @clear="onSearch"
+      <div
+        v-else
+        class="product-grid"
+        style="margin-top: 22px"
+      >
+        <ProductCard
+          v-for="item in products"
+          :key="item.id"
+          :product="item"
         />
-        <el-select
-          v-model="query.ordering"
-          class="catalog-order"
-          @change="onSearch"
-        >
-          <el-option
-            v-for="item in ORDERING_OPTIONS"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-        <el-button @click="onSearch">
-          搜索
-        </el-button>
       </div>
 
-      <el-skeleton
-        v-if="loading"
-        :rows="4"
-        animated
+      <el-pagination
+        v-if="total > PAGE_SIZE"
+        class="catalog-pagination"
+        layout="prev, pager, next"
+        :total="total"
+        :page-size="PAGE_SIZE"
+        :current-page="page"
+        @current-change="go({ page: $event })"
       />
-      <template v-else>
-        <el-empty
-          v-if="!products.length"
-          description="没有匹配的商品"
-        />
-        <div
-          v-else
-          class="product-grid"
-        >
-          <RouterLink
-            v-for="product in products"
-            :key="product.id"
-            :to="{ name: 'product-detail', params: { id: product.id } }"
-            class="product-link"
-          >
-            <el-card
-              shadow="hover"
-              class="product-card"
-            >
-              <h3>{{ product.name }}</h3>
-              <p class="product-subtitle">
-                {{ product.subtitle }}
-              </p>
-              <p class="product-price">
-                ¥{{ product.min_price ?? '—' }}
-              </p>
-            </el-card>
-          </RouterLink>
-        </div>
-
-        <el-pagination
-          v-if="total > query.page_size"
-          class="catalog-pagination"
-          layout="prev, pager, next"
-          :total="total"
-          :page-size="query.page_size"
-          :current-page="query.page"
-          @current-change="onPageChange"
-        />
-      </template>
-    </section>
-  </main>
+    </template>
+  </div>
 </template>

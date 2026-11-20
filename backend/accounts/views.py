@@ -1,13 +1,43 @@
-from django.contrib.auth import authenticate
-from rest_framework.exceptions import AuthenticationFailed
+from django.contrib.auth import authenticate, get_user_model
+from django.db import IntegrityError
+from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import LoginSerializer, UserSerializer
+from promotion.services import grant_welcome_coupon
+
+from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 from .tokens import classify_token_failure
+
+User = get_user_model()
+
+
+def issue_tokens(user) -> dict:
+    refresh = RefreshToken.for_user(user)
+    return {"access": str(refresh.access_token), "refresh": str(refresh), "user": UserSerializer(user).data}
+
+
+class RegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            user = User.objects.create_user(
+                username=serializer.validated_data["username"],
+                password=serializer.validated_data["password"],
+            )
+        except IntegrityError:
+            # 校验通过到写入之间可能被别人抢注，唯一索引兜住后按字段错误返回。
+            raise ValidationError({"username": ["用户名已被占用"]}) from None
+
+        grant_welcome_coupon(user)
+        return Response(issue_tokens(user), status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -24,14 +54,7 @@ class LoginView(APIView):
         if user is None or not user.is_active:
             raise AuthenticationFailed("用户名或密码错误", code="AUTH_INVALID_CREDENTIALS")
 
-        refresh = RefreshToken.for_user(user)
-        return Response(
-            {
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-                "user": UserSerializer(user).data,
-            }
-        )
+        return Response(issue_tokens(user))
 
 
 class RefreshView(APIView):

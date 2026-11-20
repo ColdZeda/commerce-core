@@ -33,6 +33,19 @@ export const useAuthStore = defineStore('auth', () => {
     persist()
   }
 
+  // 注册成功直接是登录态，接口回的结构与登录一致，存 token 的写法也一样。
+  async function register(username, password, passwordConfirm) {
+    const data = await authApi.register({
+      username,
+      password,
+      password_confirm: passwordConfirm,
+    })
+    access.value = data.access
+    refreshToken.value = data.refresh
+    user.value = data.user
+    persist()
+  }
+
   async function refreshAccess() {
     if (!refreshToken.value) {
       return ''
@@ -59,5 +72,5 @@ export const useAuthStore = defineStore('auth', () => {
     clear()
   }
 
-  return { access, refreshToken, user, isAuthenticated, login, refreshAccess, restore, logout }
+  return { access, refreshToken, user, isAuthenticated, login, register, refreshAccess, restore, logout }
 })

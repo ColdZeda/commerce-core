@@ -9,6 +9,20 @@ from common.errors import BusinessError
 
 from .models import Coupon, UserCoupon
 
+WELCOME_COUPON_NAME = "新客满 49 减 5"
+
+
+def grant_welcome_coupon(user) -> bool:
+    """注册后自动发新人券；券没 seed 或已领完时返回 False，不阻断注册。"""
+    coupon = Coupon.objects.filter(name=WELCOME_COUPON_NAME, is_active=True).first()
+    if coupon is None:
+        return False
+    try:
+        claim_coupon(user, coupon.pk)
+    except BusinessError:
+        return False
+    return True
+
 
 def claim_coupon(user, coupon_id: int) -> UserCoupon:
     """领取一张券；成功返回 UserCoupon。

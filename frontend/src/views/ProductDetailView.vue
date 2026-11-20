@@ -30,6 +30,7 @@ const form = reactive({ skuId: null, qty: 1, userCouponId: null, remark: '' })
 
 const selectedSku = computed(() => product.value?.skus.find((sku) => sku.id === form.skuId) || null)
 const maxQty = computed(() => Math.min(selectedSku.value?.stock ?? 1, 999))
+const totalStock = computed(() => (product.value?.skus ?? []).reduce((sum, sku) => sum + sku.stock, 0))
 const total = computed(() => Number(selectedSku.value?.price ?? 0) * form.qty)
 const selectedCoupon = computed(() => coupons.value.find((item) => item.id === form.userCouponId) || null)
 // 券面额可能大于订单金额，应付最多减到 0，和 /orders 接口的口径一致。
@@ -117,106 +118,125 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="page">
+  <div class="wrap">
     <el-skeleton
       v-if="loading"
-      :rows="6"
+      :rows="7"
       animated
+      style="padding-top: 22px"
     />
     <div
       v-else-if="product"
       class="detail-layout"
     >
+      <div class="detail-gallery">
+        <img
+          v-if="product.cover"
+          :src="product.cover"
+          :alt="product.name"
+        >
+      </div>
+
       <section class="detail-main">
         <h1>{{ product.name }}</h1>
-        <p class="product-subtitle">
+        <p class="detail-sub">
           {{ product.subtitle }}
         </p>
-        <p
-          v-if="product.description"
-          class="detail-desc"
-        >
-          {{ product.description }}
-        </p>
+        <div class="detail-meta">
+          <span v-if="product.category_label">分类 · {{ product.category_label }}</span>
+          <span>库存 · {{ totalStock }}</span>
+          <span>15 分钟内未支付自动关单</span>
+        </div>
 
-        <h2>选择规格</h2>
-        <el-radio-group v-model="form.skuId">
-          <el-radio-button
-            v-for="sku in product.skus"
-            :key="sku.id"
-            :value="sku.id"
-            :disabled="sku.stock === 0"
+        <div class="detail-block">
+          <h2>选择规格</h2>
+          <el-radio-group v-model="form.skuId">
+            <el-radio-button
+              v-for="sku in product.skus"
+              :key="sku.id"
+              :value="sku.id"
+              :disabled="sku.stock === 0"
+            >
+              {{ sku.title }} ¥{{ sku.price }}
+            </el-radio-button>
+          </el-radio-group>
+          <div class="detail-qty">
+            <span>数量</span>
+            <el-input-number
+              v-model="form.qty"
+              :min="1"
+              :max="maxQty"
+            />
+            <span
+              v-if="selectedSku"
+              class="detail-hint"
+            >该规格库存 {{ selectedSku.stock }}</span>
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <h2>优惠券</h2>
+          <el-select
+            v-model="form.userCouponId"
+            clearable
+            placeholder="不使用优惠券"
+            class="detail-coupon"
           >
-            {{ sku.title }} ¥{{ sku.price }}（库存 {{ sku.stock }}）
-          </el-radio-button>
-        </el-radio-group>
-
-        <div class="detail-qty">
-          <span>数量</span>
-          <el-input-number
-            v-model="form.qty"
-            :min="1"
-            :max="maxQty"
+            <el-option
+              v-for="item in coupons"
+              :key="item.id"
+              :label="couponLabel(item)"
+              :value="item.id"
+              :disabled="!couponUsable(item)"
+            />
+          </el-select>
+          <h2 style="margin-top: 16px">
+            备注
+          </h2>
+          <el-input
+            v-model="form.remark"
+            maxlength="200"
+            show-word-limit
+            placeholder="选填"
           />
         </div>
 
-        <el-form label-position="top">
-          <el-form-item label="优惠券">
-            <el-select
-              v-model="form.userCouponId"
-              clearable
-              placeholder="不使用优惠券"
-              class="detail-coupon"
-            >
-              <el-option
-                v-for="item in coupons"
-                :key="item.id"
-                :label="couponLabel(item)"
-                :value="item.id"
-                :disabled="!couponUsable(item)"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="备注">
-            <el-input
-              v-model="form.remark"
-              maxlength="200"
-              show-word-limit
-              placeholder="选填"
-            />
-          </el-form-item>
-        </el-form>
+        <div class="detail-block">
+          <h2>商品描述</h2>
+          <p class="detail-desc">
+            {{ product.description || '这件商品还没有写详情。' }}
+          </p>
+        </div>
       </section>
 
       <aside class="detail-summary">
-        <el-descriptions
-          :column="1"
-          border
-        >
-          <el-descriptions-item label="商品金额">
-            ¥{{ money(total) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="优惠">
-            -¥{{ money(discount) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="应付">
-            <strong class="money">¥{{ money(payable) }}</strong>
-          </el-descriptions-item>
-        </el-descriptions>
+        <div class="sum-row">
+          <span>商品金额</span>
+          <span>¥{{ money(total) }}</span>
+        </div>
+        <div class="sum-row">
+          <span>优惠</span>
+          <span>-¥{{ money(discount) }}</span>
+        </div>
+        <div class="sum-row total">
+          <span>应付</span>
+          <strong class="money">¥{{ money(payable) }}</strong>
+        </div>
         <el-button
           type="primary"
           size="large"
           :loading="submitting"
           :disabled="!selectedSku || selectedSku.stock === 0"
           class="detail-submit"
+          style="margin-top: 6px"
           @click="submit"
         >
-          {{ auth.isAuthenticated ? '提交订单' : '登录后下单' }}
+          {{ auth.isAuthenticated ? '立即下单' : '登录后下单' }}
         </el-button>
         <p class="detail-hint">
-          订单 15 分钟内未支付会被关闭
+          订单 15 分钟内未支付会被关闭，库存同时回补。
         </p>
       </aside>
     </div>
-  </main>
+  </div>
 </template>

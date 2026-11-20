@@ -4,6 +4,10 @@ export function login(payload) {
   return http.post('/auth/login', payload).then((response) => response.data)
 }
 
+export function register(payload) {
+  return http.post('/auth/register', payload).then((response) => response.data)
+}
+
 export function refresh(refreshToken) {
   return http.post('/auth/refresh', { refresh: refreshToken }).then((response) => response.data)
 }
