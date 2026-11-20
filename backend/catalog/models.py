@@ -40,6 +40,8 @@ class SKU(TimeStampedModel):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     # 有符号 INT + CHECK：库存不可能为负，靠约束而不是靠 UNSIGNED 溢出报错。
     stock = models.IntegerField(default=0)
+    # 建档时的库存基线：对账看板拿它和"账面"比，没有基线就没法证明库存守恒。
+    initial_stock = models.IntegerField(default=0)
     version = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
 
@@ -48,6 +50,12 @@ class SKU(TimeStampedModel):
         constraints = [
             models.CheckConstraint(condition=models.Q(stock__gte=0), name="ck_sku_stock_non_negative"),
         ]
+
+    def save(self, *args, **kwargs):
+        # 第一次落库时把当前库存记成基线；之后改库存不动基线，改动会体现在对账差额上。
+        if self._state.adding and not self.initial_stock:
+            self.initial_stock = self.stock
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.sku_code} {self.title}"

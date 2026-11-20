@@ -49,10 +49,13 @@ INSTALLED_APPS = [
     "address",
     "trade",
     "review",
+    "audit",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # 必须紧跟在 SecurityMiddleware 之后：后台 CSS 由 api 容器自己发，nginx 只转发 /static/。
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -102,6 +105,23 @@ DATABASES = {
 }
 
 REDIS_URL = env("REDIS_URL", "redis://127.0.0.1:6379/0")
+
+# 限流计数走 Redis；用 6 号库，别和 Celery 的 broker（0 号库）与业务键挤在一起。
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("RATELIMIT_REDIS_URL", REDIS_URL.replace("/0", "/6")),
+    }
+}
+
+# 注册 10 次/小时/IP；登录 30 次/分钟/IP + 5 次/分钟/用户名（plan §13.3）。
+RATELIMIT_ENABLED = env("RATELIMIT_ENABLED", "true").lower() == "true"
+RATELIMIT_REGISTER = int(env("RATELIMIT_REGISTER", "10"))
+RATELIMIT_REGISTER_WINDOW = int(env("RATELIMIT_REGISTER_WINDOW", str(60 * 60)))
+RATELIMIT_LOGIN_IP = int(env("RATELIMIT_LOGIN_IP", "30"))
+RATELIMIT_LOGIN_IP_WINDOW = int(env("RATELIMIT_LOGIN_IP_WINDOW", "60"))
+RATELIMIT_LOGIN_USER = int(env("RATELIMIT_LOGIN_USER", "5"))
+RATELIMIT_LOGIN_USER_WINDOW = int(env("RATELIMIT_LOGIN_USER_WINDOW", "60"))
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

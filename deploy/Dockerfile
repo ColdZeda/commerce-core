@@ -33,6 +33,10 @@ WORKDIR /app
 COPY backend/ /app/
 COPY deploy/uwsgi.ini /app/deploy/uwsgi.ini
 
+# 后台静态被白化进镜像：构建期不需要真密钥，给个占位值只为让 settings 能 import。
+RUN DJANGO_SECRET_KEY=build-only-collectstatic python manage.py collectstatic --noinput \
+    && rm -rf staticfiles/.cache
+
 RUN useradd --create-home --uid 10001 app && chown -R app:app /app
 USER app
 

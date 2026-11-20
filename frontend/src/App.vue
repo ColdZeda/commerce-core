@@ -70,6 +70,9 @@ function logout() {
             </RouterLink>
           </template>
           <span class="sep" />
+          <RouterLink to="/audit">
+            对账看板
+          </RouterLink>
           <span>客服 9:00 - 21:00</span>
         </nav>
       </div>

@@ -1,19 +1,28 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.db import IntegrityError
 from rest_framework import status
-from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.exceptions import AuthenticationFailed, Throttled, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from common import ratelimit
 from promotion.services import grant_welcome_coupon
 
 from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 from .tokens import classify_token_failure
 
 User = get_user_model()
+
+
+def throttle(key: str, limit: int, window: int) -> None:
+    try:
+        ratelimit.hit(key, limit, window)
+    except ratelimit.RateLimitExceeded as exc:
+        raise Throttled(wait=exc.retry_after) from None
 
 
 def issue_tokens(user) -> dict:
@@ -25,6 +34,9 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        ip = ratelimit.client_ip(request)
+        throttle(f"register:{ip}", settings.RATELIMIT_REGISTER, settings.RATELIMIT_REGISTER_WINDOW)
+
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -46,9 +58,19 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        username = serializer.validated_data["username"]
+        ip = ratelimit.client_ip(request)
+        # IP 挡撞库，用户名挡"换个 IP 继续猜同一个账号"，两道都要。
+        throttle(f"login-ip:{ip}", settings.RATELIMIT_LOGIN_IP, settings.RATELIMIT_LOGIN_IP_WINDOW)
+        throttle(
+            f"login-user:{username.lower()}",
+            settings.RATELIMIT_LOGIN_USER,
+            settings.RATELIMIT_LOGIN_USER_WINDOW,
+        )
+
         user = authenticate(
             request,
-            username=serializer.validated_data["username"],
+            username=username,
             password=serializer.validated_data["password"],
         )
         if user is None or not user.is_active:

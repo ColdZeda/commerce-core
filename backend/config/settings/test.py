@@ -13,3 +13,7 @@ CELERY_TASK_EAGER_PROPAGATES = True
 
 ENABLE_MOCK_PAY = True
 PAY_CALLBACK_SECRET = "test-pay-secret"
+
+# 限流默认关掉：几百个用例都在打登录/注册，开着会互相干扰。
+# 限流本身由 accounts/tests/test_ratelimit.py 打开开关单独验。
+RATELIMIT_ENABLED = False

@@ -6,6 +6,8 @@ PyJWT==2.15.1
 PyMySQL==1.1.3
 cryptography==46.0.7
 python-dotenv==1.2.4
+# 后台静态文件由 api 容器自己发，nginx 只做转发（plan §13.3）
+whitenoise==6.12.0
 redis==8.1.0
 
 # 异步关单（S5）：Celery + Redis 作 broker；不启用 result backend，也不装 celery-beat 的 DB scheduler
