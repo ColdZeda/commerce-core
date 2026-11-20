@@ -1084,6 +1084,154 @@ p {
   color: var(--ink-3);
 }
 
+/* ---------- 购物车 ---------- */
+
+.cart-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.cart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 26px 0 18px;
+}
+
+.cart-head h1 {
+  font-size: 22px;
+}
+
+.cart-sub {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.cart-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.cart-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 150px 110px 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cart-row:last-child {
+  border-bottom: 0;
+}
+
+.cart-row-head {
+  padding: 12px 20px;
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.cart-row.off {
+  background: #fdf4f2;
+}
+
+.cart-product {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.cart-thumb {
+  flex-shrink: 0;
+  width: 74px;
+  height: 74px;
+  padding: 8px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--thumb-1), var(--thumb-2));
+}
+
+.cart-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cart-name {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.cart-name:hover {
+  color: var(--accent);
+}
+
+.cart-sku {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.cart-warn {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.cart-price {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.cart-subtotal {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--price);
+}
+
+.cart-remove {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: right;
+}
+
+.cart-remove:hover {
+  color: var(--accent);
+}
+
+.cart-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  margin-top: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* 只作用于自绘的那行文字，别把 Element Plus 按钮内部的 span 也染上颜色。 */
+.cart-total {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
 @media (max-width: 1100px) {
   .hero {
     grid-template-columns: 1fr;

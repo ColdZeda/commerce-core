@@ -34,7 +34,10 @@ defineProps({
       </p>
       <div class="pcard-foot">
         <span class="price"><small>¥</small>{{ moneyText(product.min_price) }}</span>
-        <span class="pcard-add">+</span>
+        <span
+          class="pcard-add"
+          title="进详情选规格后加购"
+        >+</span>
       </div>
     </div>
   </RouterLink>
