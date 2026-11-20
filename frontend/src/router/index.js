@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
+import AddressesView from '../views/AddressesView.vue'
 import CartView from '../views/CartView.vue'
 import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
@@ -16,6 +17,7 @@ const routes = [
   { path: '/products', name: 'products', component: ProductsView },
   { path: '/products/:id', name: 'product-detail', component: ProductDetailView },
   { path: '/cart', name: 'cart', component: CartView, meta: { requiresAuth: true } },
+  { path: '/addresses', name: 'addresses', component: AddressesView, meta: { requiresAuth: true } },
   { path: '/orders', name: 'orders', component: OrdersView, meta: { requiresAuth: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]

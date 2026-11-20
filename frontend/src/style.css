@@ -819,7 +819,48 @@ p {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 18px 0 4px;
+  padding: 16px 0 0;
+}
+
+.catalog-bar-pills {
+  padding-top: 10px;
+}
+
+.catalog-search {
+  display: flex;
+  height: 36px;
+  width: 320px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.catalog-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--ink);
+  background: transparent;
+}
+
+.catalog-search button {
+  border: 0;
+  padding: 0 16px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.catalog-search button:hover {
+  background: var(--accent-dark);
 }
 
 .catalog-bar .pill {
@@ -960,6 +1001,16 @@ p {
   width: 100%;
   height: 44px;
   font-size: 15px;
+}
+
+.detail-address {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-strong);
+  font-size: 13px;
+  color: var(--ink-2);
 }
 
 .detail-hint {
@@ -1230,9 +1281,8 @@ p {
 
 .cart-summary {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 20px;
+  flex-direction: column;
+  gap: 14px;
   margin-top: 16px;
   padding: 16px 20px;
   border: 1px solid var(--border);
@@ -1240,10 +1290,120 @@ p {
   background: var(--surface);
 }
 
+.cart-address {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--border-strong);
+}
+
+.cart-address > span {
+  font-size: 14px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.cart-address .addr-picker {
+  flex: 1;
+}
+
+.cart-checkout {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+}
+
 /* 只作用于自绘的那行文字，别把 Element Plus 按钮内部的 span 也染上颜色。 */
 .cart-total {
   font-size: 14px;
   color: var(--ink-2);
+}
+
+/* ---------- 地址 ---------- */
+
+.addr-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.addr-select {
+  flex: 1;
+}
+
+.addr-manage {
+  font-size: 13px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.addr-empty {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.addr-list {
+  display: grid;
+  gap: 12px;
+}
+
+.addr-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.addr-card.is-default {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.addr-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+}
+
+.addr-title span {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.addr-title .addr-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.addr-main p {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.addr-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.addr-back {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--ink-3);
 }
 
 @media (max-width: 1100px) {

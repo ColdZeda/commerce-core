@@ -16,6 +16,7 @@ class OrderCreateSerializer(serializers.Serializer):
     # 两个入口共用一张单：立即购买传 items，购物车结算传 from_cart。
     from_cart = serializers.BooleanField(default=False)
     user_coupon_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    address_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     client_token = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     remark = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
 
@@ -65,12 +66,15 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderListSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    # 前端按名字判断状态，别去猜 0/1/2/3 的含义。
+    status_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = [
             "order_no",
             "status",
+            "status_name",
             "status_label",
             "total_amount",
             "discount_amount",
@@ -78,6 +82,9 @@ class OrderListSerializer(serializers.ModelSerializer):
             "expire_at",
             "created_at",
         ]
+
+    def get_status_name(self, obj):
+        return Order.Status(obj.status).name.lower()
 
 
 class OrderDetailSerializer(OrderListSerializer):
@@ -91,4 +98,5 @@ class OrderDetailSerializer(OrderListSerializer):
             "cancel_reason",
             "paid_at",
             "closed_at",
+            "address_snapshot",
         ]

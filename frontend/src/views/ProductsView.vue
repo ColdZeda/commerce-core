@@ -21,6 +21,7 @@ const router = useRouter()
 const products = ref([])
 const total = ref(0)
 const loading = ref(true)
+const draftKeyword = ref('')
 
 const activeCategory = computed(() =>
   typeof route.query.category === 'string' ? route.query.category : '',
@@ -42,6 +43,18 @@ const heading = computed(() => {
 function go(patch) {
   router.push({ name: 'products', query: { ...route.query, page: undefined, ...patch } })
 }
+
+function submitKeyword() {
+  go({ keyword: draftKeyword.value.trim() || undefined })
+}
+
+watch(
+  () => keyword.value,
+  (value) => {
+    draftKeyword.value = value
+  },
+  { immediate: true },
+)
 
 async function load() {
   loading.value = true
@@ -71,22 +84,18 @@ watch(() => route.fullPath, load, { immediate: true })
 <template>
   <div class="wrap">
     <div class="catalog-bar">
-      <button
-        class="pill"
-        :class="{ on: !activeCategory }"
-        @click="go({ category: undefined, keyword: undefined })"
+      <form
+        class="catalog-search"
+        @submit.prevent="submitKeyword"
       >
-        全部
-      </button>
-      <button
-        v-for="category in CATEGORIES"
-        :key="category.value"
-        class="pill"
-        :class="{ on: activeCategory === category.value }"
-        @click="go({ category: category.value, keyword: undefined })"
-      >
-        {{ category.label }}
-      </button>
+        <input
+          v-model="draftKeyword"
+          placeholder="搜商品名或副标题"
+        >
+        <button type="submit">
+          搜索
+        </button>
+      </form>
       <el-select
         :model-value="ordering"
         class="catalog-order"
@@ -101,6 +110,25 @@ watch(() => route.fullPath, load, { immediate: true })
         />
       </el-select>
       <span class="catalog-result">{{ heading }} · 共 {{ total }} 件</span>
+    </div>
+
+    <div class="catalog-bar catalog-bar-pills">
+      <button
+        class="pill"
+        :class="{ on: !activeCategory }"
+        @click="go({ category: undefined })"
+      >
+        全部
+      </button>
+      <button
+        v-for="category in CATEGORIES"
+        :key="category.value"
+        class="pill"
+        :class="{ on: activeCategory === category.value }"
+        @click="go({ category: category.value })"
+      >
+        {{ category.label }}
+      </button>
     </div>
 
     <el-skeleton

@@ -199,12 +199,14 @@ stateDiagram-v2
 | 11 | `POST /cart/items` | 登录 | 同 SKU 累加；下架 409 `PRODUCT_OFF_SHELF`、超库存 409 `STOCK_NOT_ENOUGH` |
 | 12 | `PATCH /cart/items/{id}` | 登录 | 改数量；越权 404 |
 | 13 | `DELETE /cart/items/{id}` | 登录 | 删一行；越权 404 |
-| 14 | `POST /orders` | 登录 | 201 新建；同 `client_token` 重放 200 + `X-Idempotent-Replay`；`items` 与 `from_cart` 二选一 |
-| 15 | `GET /orders` | 登录 | 仅本人，按状态筛选 |
-| 16 | `GET /orders/{order_no}` | 登录 | 他人订单一律 404，不泄露存在性 |
-| 17 | `POST /orders/{order_no}/cancel` | 登录 | PENDING→CANCELLED；已取消返回 200 |
-| 18 | `POST /orders/{order_no}/pay` | 登录 + `ENABLE_MOCK_PAY` | PENDING→PAID；已支付幂等 200 |
-| 19 | `POST /payments/callback` | 匿名 + HMAC | 已支付 200 + `idempotent`；CLOSED/CANCELLED 409 |
+| 14 | `GET/POST /addresses` | 登录 | 只操作本人地址；第一条自动默认 |
+| 15 | `PATCH/DELETE /addresses/{id}` | 登录 | 越权 404；删默认后自动顶一条 |
+| 16 | `POST /orders` | 登录 | 201 新建；同 `client_token` 重放 200 + `X-Idempotent-Replay`；`items` 与 `from_cart` 二选一；`address_id` 会拍成快照 |
+| 17 | `GET /orders` | 登录 | 仅本人，按状态筛选 |
+| 18 | `GET /orders/{order_no}` | 登录 | 他人订单一律 404，不泄露存在性；含 `address_snapshot` |
+| 19 | `POST /orders/{order_no}/cancel` | 登录 | PENDING→CANCELLED；已取消返回 200 |
+| 20 | `POST /orders/{order_no}/pay` | 登录 + `ENABLE_MOCK_PAY` | PENDING→PAID；已支付幂等 200 |
+| 21 | `POST /payments/callback` | 匿名 + HMAC | 已支付 200 + `idempotent`；CLOSED/CANCELLED 409 |
 | — | `GET /health` | 匿名 | 校验 db **与 redis**；任一不可用 503 |
 
 回调签名：`HMAC-SHA256(order_no|trade_no|amount|timestamp)`，`compare_digest` 比较，
@@ -360,11 +362,12 @@ backend/
   accounts/    注册/登录/刷新/me、Bearer 认证、token 错误分类、演示账号命令
   catalog/     商品与 SKU：分类与封面、列表/详情、admin、seed_demo（30 个商品）
   promotion/   券与用户券：领取（含并发约束）、我的券、新人券
-  cart/        购物车：加购/改量/删除、整车快照、从车结算的入参转换
+  cart/        购物车：加购/改量/删除、逐行勾选、整车快照、从车结算的入参转换
+  address/     收货地址：增删改查、默认地址唯一、下单快照
   trade/       订单：状态规则表、下单/取消/关单/支付 service、回调签名、关单任务、六个接口
   stocklab/    库存实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、压测脚本（不接主流程）
   health/      就绪探针      common/  抽象模型与业务错误      scripts/  冒烟与依赖锁检查
-frontend/      Vue 3 SPA：/、/products、/products/:id、/cart、/login、/register、/orders
+frontend/      Vue 3 SPA：/、/products、/products/:id、/cart、/addresses、/login、/register、/orders
                商品线稿 SVG 在 public/img/products/（30 张）
 deploy/        compose（本地/生产）、Dockerfile（api）、Dockerfile.web、nginx conf、uwsgi.ini
 docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶段证据）
@@ -388,7 +391,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 
 ## 11. 不做的与已知限制
 
-**不做**：短信、第三方登录、真实支付与退款、地址簿、物流、图片上传、ES 搜索、
+**不做**：短信、第三方登录、真实支付与退款、真实物流、图片上传、ES 搜索、
 完整优惠券引擎、监控告警全家桶、多机/蓝绿部署。后台只用 Django admin（`/admin/` 公网返回 404）。
 
 **明确已知的取舍**：
@@ -408,7 +411,7 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 |---|---|
 | [`docs/plan.md`](docs/plan.md) | 施工基线：范围、硬性约束 C1–C8、阶段与门槛、内存预算与降级顺序 |
 | [`docs/plan-changes.md`](docs/plan-changes.md) | 每次改计划的"之前／现在"，含一次失败分支的重写（部署失败不再切到另一个项目，改为回滚上一版） |
-| [`docs/phases/`](docs/phases) | `phase0.md` … `phase10.md`：每阶段的验收证据 |
+| [`docs/phases/`](docs/phases) | `phase0.md` … `phase11.md`：每阶段的验收证据 |
 | [`STATUS.md`](STATUS.md) | 10 秒指针：现在在哪、下一步、未验证清单 |
 
 每个 `phaseN.md` 都包含实测输出、被推翻的假设和返工记录，例如：

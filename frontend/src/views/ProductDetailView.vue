@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { fetchProduct } from '../api/catalog'
 import { fetchMyCoupons } from '../api/coupons'
 import { createOrder } from '../api/orders'
+import AddressPicker from '../components/AddressPicker.vue'
 import { useAuthStore } from '../stores/auth'
 import { useCartStore } from '../stores/cart'
 import { newClientToken } from '../utils/clientToken'
@@ -27,6 +28,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const adding = ref(false)
 const coupons = ref([])
+const addressId = ref(null)
 const clientToken = ref(newClientToken())
 
 const form = reactive({ skuId: null, qty: 1, userCouponId: null, remark: '' })
@@ -84,12 +86,17 @@ async function submit() {
     ElMessage.warning('先选一个规格')
     return
   }
+  if (!addressId.value) {
+    ElMessage.warning('先选一个收货地址')
+    return
+  }
 
   submitting.value = true
   try {
     const { order, replayed } = await createOrder({
       items: [{ sku_id: form.skuId, qty: form.qty }],
       user_coupon_id: form.userCouponId || undefined,
+      address_id: addressId.value,
       client_token: clientToken.value,
       remark: form.remark || undefined,
     })
@@ -247,6 +254,13 @@ onMounted(() => {
           <span>应付</span>
           <strong class="money">¥{{ money(payable) }}</strong>
         </div>
+        <div
+          v-if="auth.isAuthenticated"
+          class="detail-address"
+        >
+          <span>收货地址</span>
+          <AddressPicker v-model="addressId" />
+        </div>
         <div style="display: flex; gap: 10px">
           <el-button
             size="large"
@@ -261,7 +275,7 @@ onMounted(() => {
             type="primary"
             size="large"
             :loading="submitting"
-            :disabled="!selectedSku || selectedSku.stock === 0"
+            :disabled="!selectedSku || selectedSku.stock === 0 || (auth.isAuthenticated && !addressId)"
             class="detail-submit"
             @click="submit"
           >

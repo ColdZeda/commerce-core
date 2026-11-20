@@ -29,11 +29,12 @@ def generate_order_no(now=None) -> str:
 
 
 def create_order(
-    user, items: list[dict], user_coupon_id=None, client_token=None, remark=""
+    user, items: list[dict], user_coupon_id=None, client_token=None, remark="", address=None
 ) -> tuple[Order, bool]:
     """创建一个待支付订单，返回 (订单, 是否幂等重放)。
 
     items 是已通过校验的 `{"sku_id": int, "qty": int}` 列表。
+    address 是已归属该用户的 Address，会在下单瞬间拍成快照存进订单。
     抛 BusinessError：PRODUCT_OFF_SHELF / STOCK_NOT_ENOUGH / COUPON_NOT_USABLE。
     """
     token = (client_token or "").strip() or None
@@ -44,7 +45,9 @@ def create_order(
 
     try:
         with transaction.atomic():
-            order = _create_locked(user, items, user_coupon_id, token, remark)
+            order = _create_locked(
+                user, items, user_coupon_id, token, remark, address.snapshot() if address else None
+            )
     except (BusinessError, IntegrityError) as exc:
         if token is None:
             raise
@@ -149,7 +152,7 @@ def _apply_transition(order: Order, target: int, *, extra=None, fields=None) -> 
     return True
 
 
-def _create_locked(user, items: list[dict], user_coupon_id, token, remark) -> Order:
+def _create_locked(user, items: list[dict], user_coupon_id, token, remark, address_snapshot) -> Order:
     now = timezone.now()
     skus = _lock_skus(items)
     _ensure_on_shelf(skus, items)
@@ -179,6 +182,7 @@ def _create_locked(user, items: list[dict], user_coupon_id, token, remark) -> Or
         expire_at=now + timedelta(minutes=settings.ORDER_EXPIRE_MINUTES),
         client_token=token,
         remark=remark,
+        address_snapshot=address_snapshot,
     )
     OrderItem.objects.bulk_create(
         [

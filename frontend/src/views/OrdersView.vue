@@ -283,12 +283,58 @@ onMounted(() => {
             <strong class="money">¥{{ money(detail.pay_amount) }}</strong>
           </el-descriptions-item>
           <el-descriptions-item
+            v-if="detail.address_snapshot"
+            label="收货地址"
+          >
+            {{ detail.address_snapshot.receiver }} {{ detail.address_snapshot.phone }}
+            <br>
+            {{ detail.address_snapshot.region }}{{ detail.address_snapshot.detail }}
+          </el-descriptions-item>
+          <el-descriptions-item
             v-if="detail.cancel_reason"
             label="取消原因"
           >
             {{ detail.cancel_reason }}
           </el-descriptions-item>
         </el-descriptions>
+
+        <h3 class="detail-items-title">
+          进度
+        </h3>
+        <el-timeline class="order-timeline">
+          <el-timeline-item
+            :timestamp="formatTime(detail.created_at)"
+            type="primary"
+          >
+            下单
+          </el-timeline-item>
+          <el-timeline-item
+            v-if="detail.paid_at"
+            :timestamp="formatTime(detail.paid_at)"
+            type="success"
+          >
+            已支付
+          </el-timeline-item>
+          <el-timeline-item
+            v-if="detail.status_name === 'cancelled'"
+            type="info"
+          >
+            已取消
+          </el-timeline-item>
+          <el-timeline-item
+            v-if="detail.closed_at"
+            :timestamp="formatTime(detail.closed_at)"
+            type="info"
+          >
+            超时关闭，库存已回补
+          </el-timeline-item>
+          <el-timeline-item
+            type="info"
+            :hollow="true"
+          >
+            物流：演示项目未接入，不产生真实发货
+          </el-timeline-item>
+        </el-timeline>
 
         <h3 class="detail-items-title">
           商品明细

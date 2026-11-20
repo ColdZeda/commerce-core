@@ -10,6 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from address.models import Address
 from cart.services import cart_to_order_items, clear_ordered_items
 from common.errors import BusinessError
 from config.pagination import StandardPagination
@@ -63,12 +64,20 @@ class OrderListCreateView(generics.ListAPIView):
         from_cart = data.get("from_cart", False)
         items = cart_to_order_items(request.user, MAX_LINES) if from_cart else data["items"]
 
+        address = None
+        if data.get("address_id"):
+            # 别人的地址等同于不存在，不给探测入口。
+            address = Address.objects.filter(pk=data["address_id"], user=request.user).first()
+            if address is None:
+                raise ValidationError({"address_id": ["地址不存在"]})
+
         order, replayed = create_order(
             request.user,
             items,
             user_coupon_id=data.get("user_coupon_id"),
             client_token=data.get("client_token", ""),
             remark=data.get("remark", ""),
+            address=address,
         )
         # 重放说明这批行上次已经下过单、当时就清过车，再清一次会误删后来加的东西。
         if from_cart and not replayed:

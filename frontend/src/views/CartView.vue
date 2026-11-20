@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { createOrder } from '../api/orders'
+import AddressPicker from '../components/AddressPicker.vue'
 import { useAuthStore } from '../stores/auth'
 import { useCartStore } from '../stores/cart'
 import { newClientToken } from '../utils/clientToken'
@@ -22,6 +23,7 @@ const cart = useCartStore()
 const router = useRouter()
 
 const submitting = ref(false)
+const addressId = ref(null)
 // 进页面生成一次；提交成功换新的，失败保留，让重试能被识别成重放。
 const clientToken = ref(newClientToken())
 
@@ -74,6 +76,7 @@ async function checkout() {
   try {
     const { order, replayed } = await createOrder({
       from_cart: true,
+      address_id: addressId.value || undefined,
       client_token: clientToken.value,
     })
     clientToken.value = newClientToken()
@@ -194,19 +197,25 @@ async function checkout() {
       </div>
 
       <div class="cart-summary">
-        <span class="cart-total">
-          已选 {{ cart.selectedQty }} 件，合计
-          <strong class="money">¥{{ moneyText(cart.selectedAmount) }}</strong>
-        </span>
-        <el-button
-          type="primary"
-          size="large"
-          :loading="submitting"
-          :disabled="hasUnavailable || cart.selectedQty === 0"
-          @click="checkout"
-        >
-          {{ hasUnavailable ? '先取消勾选不可售商品' : '去结算' }}
-        </el-button>
+        <div class="cart-address">
+          <span>收货地址</span>
+          <AddressPicker v-model="addressId" />
+        </div>
+        <div class="cart-checkout">
+          <span class="cart-total">
+            已选 {{ cart.selectedQty }} 件，合计
+            <strong class="money">¥{{ moneyText(cart.selectedAmount) }}</strong>
+          </span>
+          <el-button
+            type="primary"
+            size="large"
+            :loading="submitting"
+            :disabled="hasUnavailable || cart.selectedQty === 0 || !addressId"
+            @click="checkout"
+          >
+            {{ hasUnavailable ? '先取消勾选不可售商品' : !addressId ? '先选收货地址' : '去结算' }}
+          </el-button>
+        </div>
       </div>
     </template>
   </div>

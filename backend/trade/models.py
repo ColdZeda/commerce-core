@@ -29,6 +29,8 @@ class Order(TimeStampedModel):
         related_name="orders",
     )
     expire_at = models.DateTimeField()
+    # 下单时的地址副本：地址后来被改或被删，订单上的收货信息都不能变。
+    address_snapshot = models.JSONField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     cancel_reason = models.CharField(max_length=200, blank=True, default="")
