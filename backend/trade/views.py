@@ -10,12 +10,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from cart.services import cart_to_order_items, clear_cart
 from common.errors import BusinessError
 from config.pagination import StandardPagination
 
 from .models import Order, OrderItem
 from .payments import verify_payload
 from .serializers import (
+    MAX_LINES,
     OrderCancelSerializer,
     OrderCreateSerializer,
     OrderDetailSerializer,
@@ -58,13 +60,20 @@ class OrderListCreateView(generics.ListAPIView):
         payload.is_valid(raise_exception=True)
         data = payload.validated_data
 
+        from_cart = data.get("from_cart", False)
+        items = cart_to_order_items(request.user, MAX_LINES) if from_cart else data["items"]
+
         order, replayed = create_order(
             request.user,
-            data["items"],
+            items,
             user_coupon_id=data.get("user_coupon_id"),
             client_token=data.get("client_token", ""),
             remark=data.get("remark", ""),
         )
+        # 重放说明这批行上次已经下过单、当时就清过车，再清一次会误删后来加的东西。
+        if from_cart and not replayed:
+            clear_cart(request.user)
+
         # 重放与首次创建的 body 一致，只多一个头，前端据此判断"这次没真的下单"。
         headers = {"X-Idempotent-Replay": "1"} if replayed else {}
         return Response(

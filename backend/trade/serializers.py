@@ -12,10 +12,21 @@ class OrderLineInputSerializer(serializers.Serializer):
 
 
 class OrderCreateSerializer(serializers.Serializer):
-    items = OrderLineInputSerializer(many=True, allow_empty=False)
+    items = OrderLineInputSerializer(many=True, required=False)
+    # 两个入口共用一张单：立即购买传 items，购物车结算传 from_cart。
+    from_cart = serializers.BooleanField(default=False)
     user_coupon_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     client_token = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     remark = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if attrs.get("from_cart"):
+            if attrs.get("items"):
+                raise serializers.ValidationError({"items": ["从购物车结算时不要再传 items"]})
+            return attrs
+        if not attrs.get("items"):
+            raise serializers.ValidationError({"items": ["结算商品不能为空"]})
+        return attrs
 
     def validate_items(self, items):
         if len(items) > MAX_LINES:
