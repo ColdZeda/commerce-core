@@ -76,6 +76,19 @@ eslint 无输出；vite build 成功
 4. 去结算 → 订单页出现两行明细、待支付、金额 ¥688；
 5. 再进购物车 → 空的，角标消失。
 
+## 上线
+
+| 项 | 结果 |
+|---|---|
+| 合并 | `main` 收到 `d645c77`（`--no-ff` 合并 `phase2`），推 GitHub 与 Gitee |
+| CI | lint / test / build & push / deploy 四段全绿 |
+| 部署 | `.current_tag` 从 `a78b719` 变 `d645c77`，6 个容器全 Up，api healthy |
+| 迁移 | `cart.0001_initial` 由 `deploy.sh` 自动执行 |
+| 接口 | 未登录 `GET /cart/items` 返回 401 `TOKEN_INVALID`，说明路由与新表都上线了 |
+| 线上联调 | `demo` 账号加购两件 → 购物车 ¥688、角标 2 → 去结算 → 订单 `OD20261120141950610304` 两行明细、¥688、待支付 |
+
+README §2 加了一张线上购物车截图。
+
 ## 踩到的坑
 
 - **`.cart-summary span` 把 Element Plus 按钮里的文字也染成深色**：按钮内部就是 `<span>`，
