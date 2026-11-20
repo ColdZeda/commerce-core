@@ -64,12 +64,10 @@ class OrderListCreateView(generics.ListAPIView):
         from_cart = data.get("from_cart", False)
         items = cart_to_order_items(request.user, MAX_LINES) if from_cart else data["items"]
 
-        address = None
-        if data.get("address_id"):
-            # 别人的地址等同于不存在，不给探测入口。
-            address = Address.objects.filter(pk=data["address_id"], user=request.user).first()
-            if address is None:
-                raise ValidationError({"address_id": ["地址不存在"]})
+        # 别人的地址等同于不存在，不给探测入口。
+        address = Address.objects.filter(pk=data["address_id"], user=request.user).first()
+        if address is None:
+            raise ValidationError({"address_id": ["地址不存在"]})
 
         order, replayed = create_order(
             request.user,

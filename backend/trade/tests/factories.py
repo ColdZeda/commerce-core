@@ -1,9 +1,10 @@
-"""订单测试工厂：商品、SKU、用户券的最小组合。"""
+"""订单测试工厂：商品、SKU、用户券与收货地址的最小组合。"""
 
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 
+from address.models import Address
 from catalog.tests.factories import make_product, make_sku
 from promotion.models import UserCoupon
 from promotion.tests.factories import make_coupon
@@ -14,6 +15,18 @@ User = get_user_model()
 
 def make_buyer(username="buyer"):
     return User.objects.create_user(username=username, password="pw-buyer-123")
+
+
+def make_address(user, **overrides):
+    """下单必须带地址，所以造买家时顺手给一个；要断言不同地址时再传 overrides。"""
+    fields = {
+        "receiver": "收货人",
+        "phone": "13800138000",
+        "region": "广东省 深圳市 南山区",
+        "detail": "科技园 1 号",
+        **overrides,
+    }
+    return Address.objects.create(user=user, **fields)
 
 
 def make_sku_stock(price="30.00", stock=10, is_active=True):

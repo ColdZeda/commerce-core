@@ -16,7 +16,8 @@ class OrderCreateSerializer(serializers.Serializer):
     # 两个入口共用一张单：立即购买传 items，购物车结算传 from_cart。
     from_cart = serializers.BooleanField(default=False)
     user_coupon_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
-    address_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    # 必填：没有收货地址的单发不出去，这条规则守在接口上，不靠前端自觉。
+    address_id = serializers.IntegerField(min_value=1)
     client_token = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     remark = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
 

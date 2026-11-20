@@ -174,12 +174,19 @@ def test_unknown_address_id_is_rejected(auth_client):
     assert Order.objects.count() == 0
 
 
-def test_order_without_address_still_works(auth_client):
+def test_other_users_address_id_is_rejected_on_checkout(auth_client):
+    stranger = make_buyer(username="addr-other")
+    theirs = Address.objects.create(
+        user=stranger, receiver="别人的", phone="13900139000", region="北京市", detail="某处"
+    )
     sku = make_sku_stock(price="50.00", stock=10)
 
     response = auth_client.post(
-        reverse("order-list"), {"items": [{"sku_id": sku.pk, "qty": 1}]}, format="json"
+        reverse("order-list"),
+        {"items": [{"sku_id": sku.pk, "qty": 1}], "address_id": theirs.pk},
+        format="json",
     )
 
-    assert response.status_code == 201
-    assert response.json()["address_snapshot"] is None
+    assert response.status_code == 400
+    assert "address_id" in response.json()["detail"]
+    assert Order.objects.count() == 0

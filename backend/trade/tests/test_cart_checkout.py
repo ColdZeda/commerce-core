@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from cart.models import CartItem
 from trade.models import Order
-from trade.tests.factories import make_buyer, make_sku_stock
+from trade.tests.factories import make_address, make_buyer, make_sku_stock
 
 pytestmark = pytest.mark.django_db
 
@@ -15,6 +15,11 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def buyer():
     return make_buyer()
+
+
+@pytest.fixture
+def address(buyer):
+    return make_address(buyer)
 
 
 @pytest.fixture
@@ -28,17 +33,18 @@ def add_to_cart(client, sku, qty=1):
     client.post(reverse("cart-items"), {"sku_id": sku.pk, "qty": qty}, format="json")
 
 
-def checkout(client, **body):
-    return client.post(reverse("order-list"), {"from_cart": True, **body}, format="json")
+def checkout(client, address, **body):
+    payload = {"from_cart": True, "address_id": address.pk, **body}
+    return client.post(reverse("order-list"), payload, format="json")
 
 
-def test_checkout_creates_order_from_cart_and_clears_it(auth_client, buyer):
+def test_checkout_creates_order_from_cart_and_clears_it(auth_client, buyer, address):
     first = make_sku_stock(price="30.00", stock=10)
     second = make_sku_stock(price="20.00", stock=5)
     add_to_cart(auth_client, first, qty=2)
     add_to_cart(auth_client, second, qty=1)
 
-    response = checkout(auth_client)
+    response = checkout(auth_client, address)
 
     assert response.status_code == 201
     body = response.json()
@@ -48,7 +54,7 @@ def test_checkout_creates_order_from_cart_and_clears_it(auth_client, buyer):
     assert CartItem.objects.filter(user=buyer).count() == 0
 
 
-def test_only_selected_lines_are_ordered_and_cleared(auth_client, buyer):
+def test_only_selected_lines_are_ordered_and_cleared(auth_client, buyer, address):
     first = make_sku_stock(price="30.00", stock=10)
     second = make_sku_stock(price="20.00", stock=10)
     add_to_cart(auth_client, first, qty=2)
@@ -56,7 +62,7 @@ def test_only_selected_lines_are_ordered_and_cleared(auth_client, buyer):
     second_row = CartItem.objects.get(sku=second)
     auth_client.patch(reverse("cart-item-detail", args=[second_row.pk]), {"selected": False}, format="json")
 
-    response = checkout(auth_client)
+    response = checkout(auth_client, address)
 
     assert response.status_code == 201
     body = response.json()
@@ -67,12 +73,12 @@ def test_only_selected_lines_are_ordered_and_cleared(auth_client, buyer):
     assert remaining.sku_id == second.pk
 
 
-def test_nothing_selected_is_rejected(auth_client):
+def test_nothing_selected_is_rejected(auth_client, address):
     sku = make_sku_stock(price="30.00", stock=10)
     add_to_cart(auth_client, sku, qty=1)
     auth_client.patch(reverse("cart-items"), {"selected": False}, format="json")
 
-    response = checkout(auth_client)
+    response = checkout(auth_client, address)
 
     assert response.status_code == 409
     assert response.json()["code"] == "CART_EMPTY"
@@ -80,31 +86,31 @@ def test_nothing_selected_is_rejected(auth_client):
     assert CartItem.objects.count() == 1
 
 
-def test_empty_cart_is_rejected(auth_client):
-    response = checkout(auth_client)
+def test_empty_cart_is_rejected(auth_client, address):
+    response = checkout(auth_client, address)
 
     assert response.status_code == 409
     assert response.json()["code"] == "CART_EMPTY"
     assert Order.objects.count() == 0
 
 
-def test_from_cart_with_items_is_rejected(auth_client):
+def test_from_cart_with_items_is_rejected(auth_client, address):
     sku = make_sku_stock(price="30.00", stock=10)
 
-    response = checkout(auth_client, items=[{"sku_id": sku.pk, "qty": 1}])
+    response = checkout(auth_client, address, items=[{"sku_id": sku.pk, "qty": 1}])
 
     assert response.status_code == 400
     assert "items" in response.json()["detail"]
 
 
-def test_cart_line_beyond_stock_keeps_cart_after_failure(auth_client):
+def test_cart_line_beyond_stock_keeps_cart_after_failure(auth_client, address):
     sku = make_sku_stock(price="30.00", stock=10)
     add_to_cart(auth_client, sku, qty=3)
     # 加购之后库存被别人买走一部分，结算时必须失败且车不能被清掉。
     sku.stock = 1
     sku.save(update_fields=["stock"])
 
-    response = checkout(auth_client)
+    response = checkout(auth_client, address)
 
     assert response.status_code == 409
     assert response.json()["code"] == "STOCK_NOT_ENOUGH"
@@ -112,13 +118,13 @@ def test_cart_line_beyond_stock_keeps_cart_after_failure(auth_client):
     assert Order.objects.count() == 0
 
 
-def test_replay_does_not_clear_items_added_afterwards(auth_client):
+def test_replay_does_not_clear_items_added_afterwards(auth_client, address):
     sku = make_sku_stock(price="30.00", stock=10)
     add_to_cart(auth_client, sku, qty=1)
 
-    first = checkout(auth_client, client_token="cart-token-1")
+    first = checkout(auth_client, address, client_token="cart-token-1")
     add_to_cart(auth_client, sku, qty=2)
-    second = checkout(auth_client, client_token="cart-token-1")
+    second = checkout(auth_client, address, client_token="cart-token-1")
 
     assert first.status_code == 201
     assert second.status_code == 200
