@@ -1,6 +1,6 @@
 """商品只读接口：列表带最低在售价，详情带在售 SKU 与库存。"""
 
-from django.db.models import Min, Prefetch, Q
+from django.db.models import Avg, Count, Min, Prefetch, Q
 from rest_framework import generics
 from rest_framework.exceptions import NotFound, ValidationError
 
@@ -55,11 +55,21 @@ class ProductDetailView(generics.RetrieveAPIView):
     serializer_class = ProductDetailSerializer
 
     def get_queryset(self):
-        return Product.objects.filter(is_active=True).prefetch_related(
-            Prefetch(
-                "skus",
-                queryset=SKU.objects.filter(is_active=True).order_by("id"),
-                to_attr="active_skus",
+        # 评分在同一个查询里聚合，不额外打一次库（详情页查询数是 2 的契约不能破）。
+        from review.models import Review  # noqa: F401  延迟导入：review 反过来依赖 catalog
+
+        return (
+            Product.objects.filter(is_active=True)
+            .annotate(
+                review_count=Count("reviews", distinct=True),
+                rating_average=Avg("reviews__rating"),
+            )
+            .prefetch_related(
+                Prefetch(
+                    "skus",
+                    queryset=SKU.objects.filter(is_active=True).order_by("id"),
+                    to_attr="active_skus",
+                )
             )
         )
 

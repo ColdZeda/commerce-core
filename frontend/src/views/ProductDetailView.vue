@@ -7,6 +7,7 @@ import { fetchProduct } from '../api/catalog'
 import { fetchMyCoupons } from '../api/coupons'
 import { createOrder } from '../api/orders'
 import AddressPicker from '../components/AddressPicker.vue'
+import ProductReviews from '../components/ProductReviews.vue'
 import { useAuthStore } from '../stores/auth'
 import { useCartStore } from '../stores/cart'
 import { newClientToken } from '../utils/clientToken'
@@ -177,6 +178,19 @@ onMounted(() => {
         <div class="detail-meta">
           <span v-if="product.category_label">分类 · {{ product.category_label }}</span>
           <span>库存 · {{ totalStock }}</span>
+          <span
+            v-if="product.review_count"
+            class="detail-rating"
+          >
+            <el-rate
+              :model-value="product.rating_average"
+              disabled
+              allow-half
+              size="small"
+            />
+            {{ product.rating_average }}（{{ product.review_count }} 条）
+          </span>
+          <span v-else>暂无评价</span>
           <span>15 分钟内未支付自动关单</span>
         </div>
 
@@ -239,6 +253,8 @@ onMounted(() => {
             {{ product.description || '这件商品还没有写详情。' }}
           </p>
         </div>
+
+        <ProductReviews :product-id="product.id" />
       </section>
 
       <aside class="detail-summary">

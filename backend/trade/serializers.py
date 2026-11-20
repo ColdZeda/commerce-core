@@ -59,10 +59,15 @@ class PaymentCallbackSerializer(serializers.Serializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     sku_id = serializers.IntegerField(read_only=True, allow_null=True)
+    reviewed = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
-        fields = ["sku_id", "sku_code", "title", "unit_price", "qty", "subtotal"]
+        fields = ["id", "sku_id", "sku_code", "title", "unit_price", "qty", "subtotal", "reviewed"]
+
+    def get_reviewed(self, obj):
+        # 详情查询已经 select_related("review")，这里不再多打一次库。
+        return hasattr(obj, "review")
 
 
 class OrderListSerializer(serializers.ModelSerializer):

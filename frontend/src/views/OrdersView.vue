@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 
 import { fetchMyCoupons } from '../api/coupons'
 import { cancelOrder, fetchOrder, fetchOrders, payOrder } from '../api/orders'
+import { submitOrderReview } from '../api/reviews'
 
 const TABS = [
   { name: 'all', label: '全部' },
@@ -44,6 +45,17 @@ const paying = ref('')
 
 const coupons = ref([])
 const couponsVisible = ref(false)
+
+const reviewVisible = ref(false)
+const reviewing = ref(false)
+const reviewEntries = ref([])
+
+const REVIEW_ERRORS = {
+  REVIEW_ORDER_NOT_PAID: '只有已支付的订单可以评价',
+  REVIEW_ALREADY_EXISTS: '这些商品里有的已经评过了',
+  REVIEW_PRODUCT_GONE: '商品已不存在，无法评价',
+  NOT_FOUND: '订单或明细不存在',
+}
 
 function money(value) {
   return Number(value).toFixed(2)
@@ -137,6 +149,46 @@ async function openCoupons() {
   const data = await fetchMyCoupons({ status: 'unused', page_size: 50 })
   coupons.value = data.results
   couponsVisible.value = true
+}
+
+function pendingReviews(order) {
+  return (order?.items ?? []).filter((item) => !item.reviewed)
+}
+
+function openReview() {
+  // 已评过的行不再列出来，避免用户以为要重评一次。
+  reviewEntries.value = pendingReviews(detail.value).map((item) => ({
+    order_item_id: item.id,
+    title: item.title,
+    rating: 5,
+    content: '',
+  }))
+  reviewVisible.value = true
+}
+
+async function submitReview() {
+  if (!reviewEntries.value.length) {
+    return
+  }
+  reviewing.value = true
+  try {
+    const { created } = await submitOrderReview(
+      detail.value.order_no,
+      reviewEntries.value.map(({ order_item_id, rating, content }) => ({
+        order_item_id,
+        rating,
+        content,
+      })),
+    )
+    reviewVisible.value = false
+    ElMessage.success(`已提交 ${created} 条评价`)
+    detail.value = await fetchOrder(detail.value.order_no)
+    await load()
+  } catch (error) {
+    ElMessage.warning(REVIEW_ERRORS[error?.response?.data?.code] || '评价失败，请稍后再试')
+  } finally {
+    reviewing.value = false
+  }
 }
 
 onMounted(() => {
@@ -377,6 +429,14 @@ onMounted(() => {
         </el-table>
 
         <el-button
+          v-if="detail.status_name === 'paid' && pendingReviews(detail).length"
+          type="primary"
+          class="detail-submit"
+          @click="openReview"
+        >
+          评价商品（{{ pendingReviews(detail).length }}）
+        </el-button>
+        <el-button
           v-if="isPending(detail)"
           type="success"
           class="detail-submit"
@@ -419,5 +479,45 @@ onMounted(() => {
         </div>
       </el-card>
     </el-drawer>
+
+    <el-dialog
+      v-model="reviewVisible"
+      title="评价商品"
+      width="520px"
+    >
+      <p class="review-done">
+        评价只针对已支付的订单，每条商品只能评一次，提交后不能修改。
+      </p>
+      <div
+        v-for="entry in reviewEntries"
+        :key="entry.order_item_id"
+        class="review-row"
+      >
+        <div class="review-row-head">
+          <span class="review-row-title">{{ entry.title }}</span>
+          <el-rate v-model="entry.rating" />
+        </div>
+        <el-input
+          v-model="entry.content"
+          type="textarea"
+          :rows="2"
+          maxlength="500"
+          show-word-limit
+          placeholder="说说使用感受（选填）"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="reviewVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="reviewing"
+          @click="submitReview"
+        >
+          提交评价
+        </el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>

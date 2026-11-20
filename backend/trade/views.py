@@ -37,9 +37,9 @@ STATUS_BY_NAME = {
 
 
 def _load_with_items(order: Order) -> Order:
-    return Order.objects.prefetch_related(Prefetch("items", queryset=OrderItem.objects.order_by("id"))).get(
-        pk=order.pk
-    )
+    return Order.objects.prefetch_related(
+        Prefetch("items", queryset=OrderItem.objects.select_related("review").order_by("id"))
+    ).get(pk=order.pk)
 
 
 class OrderListCreateView(generics.ListAPIView):
