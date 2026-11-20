@@ -6,10 +6,22 @@ from common.models import TimeStampedModel
 
 
 class Product(TimeStampedModel):
+    class Category(models.TextChoices):
+        KEYBOARD = "keyboard", "键盘"
+        MOUSE = "mouse", "鼠标"
+        HEADSET = "headset", "耳机"
+        MONITOR = "monitor", "显示器"
+        STAND = "stand", "支架"
+        DOCK = "dock", "扩展坞"
+
     name = models.CharField(max_length=120)
     subtitle = models.CharField(max_length=200, blank=True, default="")
     description = models.TextField(blank=True, default="")
-    cover_url = models.URLField(max_length=500, blank=True, default="")
+    # 封面是随前端一起打包的静态 SVG，只存路径（如 /img/products/kbd-87.svg）；站内没有上传。
+    cover = models.CharField(max_length=200, blank=True, default="")
+    category = models.CharField(max_length=16, choices=Category.choices, blank=True, default="")
+    # 没有真实销量就不编造，"热销"由后台手选；"新品"按 created_at 排。
+    is_featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
     class Meta:

@@ -252,7 +252,7 @@ onMounted(() => {
     <el-drawer
       v-model="detailVisible"
       title="订单详情"
-      size="460px"
+      size="560px"
     >
       <template v-if="detail">
         <el-descriptions

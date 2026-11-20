@@ -74,6 +74,47 @@ def test_ordering_outside_whitelist_returns_400(client):
 
 
 @pytest.mark.django_db
+def test_list_filters_by_category(client):
+    keyboard = make_product(name="键盘", category="keyboard")
+    make_sku(keyboard, price="10.00")
+    make_product(name="鼠标", category="mouse")
+
+    payload = client.get(reverse("product-list"), {"category": "keyboard"}).json()
+
+    assert payload["count"] == 1
+    assert payload["results"][0]["name"] == "键盘"
+    assert payload["results"][0]["category_label"] == "键盘"
+
+
+@pytest.mark.django_db
+def test_list_rejects_unknown_category(client):
+    response = client.get(reverse("product-list"), {"category": "keyboards"})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.django_db
+def test_list_filters_by_featured(client):
+    make_product(name="热销", is_featured=True)
+    make_product(name="普通")
+
+    payload = client.get(reverse("product-list"), {"is_featured": "1"}).json()
+
+    assert payload["count"] == 1
+    assert payload["results"][0]["name"] == "热销"
+
+
+@pytest.mark.django_db
+def test_list_returns_cover_path(client):
+    make_product(name="带图商品", cover="/img/products/kbd-87.svg")
+
+    payload = client.get(reverse("product-list")).json()
+
+    assert payload["results"][0]["cover"] == "/img/products/kbd-87.svg"
+
+
+@pytest.mark.django_db
 def test_detail_returns_active_skus_and_404_for_missing(client):
     product = make_product(name="详情商品")
     active = make_sku(product, price="88.00", stock=7)

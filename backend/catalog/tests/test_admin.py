@@ -22,7 +22,7 @@ def test_admin_can_update_sku_price_and_stock(admin_client):
             "name": product.name,
             "subtitle": "",
             "description": "",
-            "cover_url": "",
+            "cover": "",
             "is_active": "on",
             "skus-TOTAL_FORMS": "1",
             "skus-INITIAL_FORMS": "1",

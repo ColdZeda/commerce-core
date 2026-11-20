@@ -37,6 +37,17 @@ class ProductListView(generics.ListAPIView):
         keyword = self.request.query_params.get("keyword", "").strip()
         if keyword:
             queryset = queryset.filter(Q(name__icontains=keyword) | Q(subtitle__icontains=keyword))
+
+        category = self.request.query_params.get("category", "").strip()
+        if category:
+            # 未知分类直接报错，避免前端把拼错的分类当成"该分类没商品"。
+            if category not in Product.Category.values:
+                raise ValidationError({"category": [f"允许的分类：{', '.join(Product.Category.values)}"]})
+            queryset = queryset.filter(category=category)
+
+        if self.request.query_params.get("is_featured", "").strip() in {"1", "true"}:
+            queryset = queryset.filter(is_featured=True)
+
         return queryset
 
 

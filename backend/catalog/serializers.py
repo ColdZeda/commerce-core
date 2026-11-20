@@ -5,10 +5,21 @@ from .models import SKU, Product
 
 class ProductListSerializer(serializers.ModelSerializer):
     min_price = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True, read_only=True)
+    category_label = serializers.CharField(source="get_category_display", read_only=True)
 
     class Meta:
         model = Product
-        fields = ["id", "name", "subtitle", "cover_url", "min_price", "created_at"]
+        fields = [
+            "id",
+            "name",
+            "subtitle",
+            "cover",
+            "category",
+            "category_label",
+            "is_featured",
+            "min_price",
+            "created_at",
+        ]
 
 
 class SKUSerializer(serializers.ModelSerializer):
@@ -20,10 +31,23 @@ class SKUSerializer(serializers.ModelSerializer):
 class ProductDetailSerializer(serializers.ModelSerializer):
     skus = serializers.SerializerMethodField()
     min_price = serializers.SerializerMethodField()
+    category_label = serializers.CharField(source="get_category_display", read_only=True)
 
     class Meta:
         model = Product
-        fields = ["id", "name", "subtitle", "description", "cover_url", "min_price", "skus", "created_at"]
+        fields = [
+            "id",
+            "name",
+            "subtitle",
+            "description",
+            "cover",
+            "category",
+            "category_label",
+            "is_featured",
+            "min_price",
+            "skus",
+            "created_at",
+        ]
 
     def get_skus(self, obj):
         return SKUSerializer(getattr(obj, "active_skus", []), many=True).data
