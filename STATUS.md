@@ -11,12 +11,12 @@
 **只剩 S14 退款**。
 
 - 公网：`http://120.24.67.82:8080`（无域名无 HTTPS）
-- 线上版本：`a8814eb`（`.current_tag`）
+- 线上版本：`e642b2b`（`.current_tag`）
 - 线上数据：30 个商品（6 类 × 5，都有图有详情）、35 个 SKU、3 张券、1 条地址、1 条评价
 - **对账看板线上全平**：35 个 SKU，`unbalanced=0`
 - 服务器 6 个容器：api(healthy) / web / worker / beat / mysql(healthy) / redis(healthy)
-- 测试：**208 个用例**全过；注释密度 2.3%；ruff / eslint / vite build 均通过
-- 分支：`main` 与 `phase2` 都指向 `a8814eb`
+- 测试：**215 个用例**全过；注释密度 2.3%；ruff / eslint / vite build 均通过
+- 分支：`main` 与 `phase2` 都指向 `e642b2b`
 
 ## 下一步：S14 退款
 

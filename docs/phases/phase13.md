@@ -84,7 +84,7 @@ Vite 用 `--host 127.0.0.1`，不把开发端口暴露到局域网。
 
 ```
 $ .venv\Scripts\python -m pytest
-208 passed
+215 passed
 
 $ ruff check . && ruff format --check .
 All checks passed! / 134 files already formatted
@@ -114,6 +114,22 @@ $ powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
 | `/admin/`（公网） | 404（C1 未破） |
 | `/admin/`（服务器内 127.0.0.1） | 302 → 登录页 200（隧道能进后台） |
 | 登录限流 | 同一用户名连续 7 次错误口令：5 次 401 后第 6、7 次 429 |
+
+## 上线
+
+线上验证（`612dcdb` / `a8814eb` / `e642b2b` 三次部署，CI 全绿）：
+
+| 项 | 结果 |
+|---|---|
+| `/api/v1/audit` | 200，35 个 SKU、`unbalanced=0`，恒等式全部成立 |
+| `/static/admin/css/base.css` | 200（whitenoise 正常发后台静态） |
+| `/admin/`（公网） | 404（C1 未破） |
+| `/admin/`（服务器内 127.0.0.1） | 302 → 登录页 200（隧道能进后台） |
+| 登录限流 | 同一用户名连续 7 次错误口令：5 次 401 后第 6、7 次 429 |
+
+补做的两件事（`e642b2b`）：`create_demo_user --staff`（已存在的普通号可只补权限、不动口令），
+以及把"订单/券在 admin 只能看不能改"写成用例（POST 一律 403）。
+这两条是 §13.3 承诺过但第一版没验的，补上后 S13 才算收口。
 
 ## 踩到的坑
 
