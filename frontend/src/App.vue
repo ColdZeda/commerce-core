@@ -1,16 +1,31 @@
 <script setup>
 import { ElMessage } from 'element-plus'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
 import { CATEGORIES } from './constants/categories'
 import { useAuthStore } from './stores/auth'
+import { useCartStore } from './stores/cart'
 
 const auth = useAuthStore()
+const cart = useCartStore()
 const router = useRouter()
 const route = useRoute()
 
 const keyword = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '')
+
+// 登录态变化就重取整车：刷新页面能恢复件数，换账号不会看到上一个人的车。
+watch(
+  () => auth.isAuthenticated,
+  (loggedIn) => {
+    if (loggedIn) {
+      cart.load().catch(() => cart.reset())
+    } else {
+      cart.reset()
+    }
+  },
+  { immediate: true },
+)
 
 function search() {
   router.push({ name: 'products', query: keyword.value ? { keyword: keyword.value } : {} })
@@ -83,9 +98,13 @@ function logout() {
         </form>
         <RouterLink
           class="header-cart"
-          to="/orders"
+          to="/cart"
         >
-          {{ auth.isAuthenticated ? '我的订单' : '登录' }}
+          <span>购物车</span>
+          <span
+            v-if="cart.count"
+            class="cart-badge"
+          >{{ cart.count }}</span>
         </RouterLink>
       </div>
     </header>

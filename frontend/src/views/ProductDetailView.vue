@@ -7,6 +7,7 @@ import { fetchProduct } from '../api/catalog'
 import { fetchMyCoupons } from '../api/coupons'
 import { createOrder } from '../api/orders'
 import { useAuthStore } from '../stores/auth'
+import { useCartStore } from '../stores/cart'
 import { newClientToken } from '../utils/clientToken'
 
 const ORDER_ERRORS = {
@@ -19,10 +20,12 @@ const ORDER_ERRORS = {
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const cart = useCartStore()
 
 const product = ref(null)
 const loading = ref(true)
 const submitting = ref(false)
+const adding = ref(false)
 const coupons = ref([])
 const clientToken = ref(newClientToken())
 
@@ -98,6 +101,28 @@ async function submit() {
     ElMessage.warning(ORDER_ERRORS[code] || '下单失败，请稍后再试')
   } finally {
     submitting.value = false
+  }
+}
+
+async function addToCart() {
+  if (!auth.isAuthenticated) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!selectedSku.value) {
+    ElMessage.warning('先选一个规格')
+    return
+  }
+
+  adding.value = true
+  try {
+    await cart.add(form.skuId, form.qty)
+    ElMessage.success(`已加入购物车，共 ${cart.totalQty} 件`)
+  } catch (error) {
+    const code = error?.response?.data?.code
+    ElMessage.warning(ORDER_ERRORS[code] || '加入购物车失败')
+  } finally {
+    adding.value = false
   }
 }
 
@@ -222,19 +247,29 @@ onMounted(() => {
           <span>应付</span>
           <strong class="money">¥{{ money(payable) }}</strong>
         </div>
-        <el-button
-          type="primary"
-          size="large"
-          :loading="submitting"
-          :disabled="!selectedSku || selectedSku.stock === 0"
-          class="detail-submit"
-          style="margin-top: 6px"
-          @click="submit"
-        >
-          {{ auth.isAuthenticated ? '立即下单' : '登录后下单' }}
-        </el-button>
+        <div style="display: flex; gap: 10px">
+          <el-button
+            size="large"
+            :loading="adding"
+            :disabled="!selectedSku || selectedSku.stock === 0"
+            class="detail-submit"
+            @click="addToCart"
+          >
+            加入购物车
+          </el-button>
+          <el-button
+            type="primary"
+            size="large"
+            :loading="submitting"
+            :disabled="!selectedSku || selectedSku.stock === 0"
+            class="detail-submit"
+            @click="submit"
+          >
+            {{ auth.isAuthenticated ? '立即购买' : '登录后购买' }}
+          </el-button>
+        </div>
         <p class="detail-hint">
-          订单 15 分钟内未支付会被关闭，库存同时回补。
+          立即购买跳过购物车；订单 15 分钟内未支付会被关闭，库存同时回补。
         </p>
       </aside>
     </div>
