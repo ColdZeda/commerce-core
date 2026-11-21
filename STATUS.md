@@ -22,12 +22,11 @@
 - 后台：`admin` 账号已建（superuser），走 SSH 隧道可进，公网 `/admin/` 仍 404；口令只在 `..\ops\demo-account.md`
 - 测试：**232 个用例**全过；注释密度 2.4%；ruff / eslint / vite build 均通过
 - 分支：`main` 与 `phase2` 同指（当前 HEAD）
-- README 已按 `plan.md` §13.6 重写过一版，**下一轮按走查结论再改**
+- README 已按 S15 走查结论重写并重拍截图（9 张，全部取自线上）
 
 ## 下一步
 
-用户先自己再走查一轮；有问题的记清单，改完最后整改 README（截图要按新导航重拍）。
-再往后没有剩余阶段，候选（**不是承诺**）在 `docs/candidates.md`：
+没有进行中的阶段。想继续的话，候选（**不是承诺**）在 `docs/candidates.md`：
 HTTPS 与域名、部分退款、评论带图、商品搜索、看板历史趋势。
 
 ## 卡点
