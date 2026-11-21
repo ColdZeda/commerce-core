@@ -4,6 +4,13 @@ name: CI
 # 手动触发时 mode=check 只做只读检查（不推镜像、不写服务器），mode=deploy 才真正部署。
 on:
   push:
+    # 纯文档改动不需要重建镜像：构建要连 ACR，而 GitHub runner 到阿里云 cn-shenzhen
+    # 偶发连接重置（2026-11-21 连续两次），让文档提交把 CI 弄红没有意义。
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "STATUS.md"
+      - "AGENTS.md"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -129,11 +136,22 @@ jobs:
 
       - name: 登录 ACR
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+        env:
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        # 不用 docker/login-action：它失败就是整条流水线红，而这里的失败几乎都是
+        # runner 到阿里云鉴权端点的瞬时断连（read: connection reset by peer）。
+        run: |
+          for i in 1 2 3; do
+            if printf '%s' "$ACR_PASSWORD" | docker login --username "$ACR_USERNAME" --password-stdin "$ACR_REGISTRY"; then
+              echo "ACR 登录成功（第 $i 次）"
+              exit 0
+            fi
+            echo "ACR 登录第 $i 次失败，5 秒后重试"
+            sleep 5
+          done
+          echo "ACR 登录重试 3 次仍失败"
+          exit 1
 
       - name: api
         id: api

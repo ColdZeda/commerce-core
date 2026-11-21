@@ -65,6 +65,10 @@ eslint 无输出；vite build 成功
 - **Element Plus 的相邻按钮 `margin-left`**：`width:100%` 的按钮并排时，这条外边距会把第二个顶出去，
   症状是"右边多出来一截"而不是"没对齐"，容易误判成宽度问题。
 - **快照拼标题要截断**：`OrderItem.title` 是 120 字符，商品名 + 规格拼起来可能超，拼完统一 `[:120]`。
+- **ACR 鉴权偶发断连会让文档提交把 CI 弄红**：`docker/login-action` 连阿里云鉴权端点偶发
+  `read: connection reset by peer`（同日两次），失败即整条流水线红、`deploy` 被跳过。
+  处置：`push` 的 `paths-ignore` 排掉纯文档路径（不需要重建镜像），
+  ACR 登录改成 `docker login --password-stdin` + 3 次重试。
 
 ## 未做
 
