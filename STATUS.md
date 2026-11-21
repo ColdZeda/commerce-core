@@ -11,13 +11,13 @@
 一键脚本、**整单退款**。二期到此收口，没有进行中的阶段。
 
 - 公网：`http://120.24.67.82:8080`（无域名无 HTTPS）
-- 线上版本：`b33ca39`（`.current_tag`），上一版 `e61dfff`
+- 线上版本：S14 代码 `5459cc9`（之后只有文档提交，`.current_tag` 会随文档提交前移）
 - 线上数据：30 个商品（6 类 × 5，都有图有详情）、35 个 SKU、3 张券、
   13 张订单（含 `ODDEMO0001`–`ODDEMO0005` 五个演示单）、3 条评价
 - **对账看板线上全平**：35 个 SKU，`unbalanced=0`；订单 pending 1 / paid 3 / cancelled 3 / closed 4 / refunded 2
 - 服务器 6 个容器：api(healthy) / web / worker / beat / mysql(healthy) / redis(healthy)
 - 测试：**232 个用例**全过；注释密度 2.3%；ruff / eslint / vite build 均通过
-- 分支：`main` 与 `phase2` 都指向 `b33ca39`
+- 分支：`main` 与 `phase2` 同指（当前 HEAD）
 - README 已按 `plan.md` §13.6 完成结构性重写
 
 ## 下一步
