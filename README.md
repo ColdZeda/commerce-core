@@ -33,7 +33,7 @@
 | 容器 | 6 个：api(uWSGI) / web(nginx+静态) / worker / beat / mysql / redis |
 | 内存实测 | 容器合计约 **413 MiB**，系统 available **759 MB** |
 | 部署方式 | push 到 main → GitHub Actions → ACR → ssh 上线 |
-| 数据 | 30 个商品（6 类 × 5，都有图有详情）、35 个 SKU、3 张券、5 条演示订单、2 条评价 |
+| 数据 | 30 个商品（6 类 × 5，都有图有详情）、35 个 SKU、3 张券；`demo` 账号名下有 `ODDEMO0001`–`ODDEMO0005` 五张演示订单（覆盖全部状态）与 2 条评价 |
 
 **演示账号**：`demo` / `demo1234`（仅线上；本地要自己建，见 §7）
 
