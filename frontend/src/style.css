@@ -243,21 +243,20 @@ p {
   font-size: 14px;
 }
 
+.site-nav-in a {
+  color: var(--ink-2);
+  padding-bottom: 3px;
+}
+
 .site-nav-in a:hover {
   color: var(--accent);
 }
 
-.nav-all {
-  padding: 6px 15px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
+/* 选中态：颜色 + 底部细线，让人一眼知道自己在哪个分类。 */
+.site-nav-in a.on {
+  color: var(--accent);
   font-weight: 600;
-}
-
-.nav-all:hover {
-  color: #fff;
-  background: var(--accent-dark);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .nav-note {
@@ -822,10 +821,6 @@ p {
   padding: 16px 0 0;
 }
 
-.catalog-bar-pills {
-  padding-top: 10px;
-}
-
 .catalog-search {
   display: flex;
   height: 36px;
@@ -861,24 +856,6 @@ p {
 
 .catalog-search button:hover {
   background: var(--accent-dark);
-}
-
-.catalog-bar .pill {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 13px;
-  color: var(--ink-2);
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.catalog-bar .pill.on {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
 }
 
 .catalog-result {
@@ -1009,6 +986,19 @@ p {
   font-size: 15px;
 }
 
+/* 抽屉里的操作按钮：两个等宽并排，只有一个时占满整行。
+   Element 会给相邻按钮加 margin-left，这里必须清掉，否则第二个会右移并溢出。 */
+.detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.detail-actions .el-button {
+  flex: 1;
+  margin-left: 0;
+}
+
 .detail-address {
   display: flex;
   flex-direction: column;
@@ -1094,6 +1084,13 @@ p {
   width: 100%;
   height: 42px;
   margin-top: 6px;
+}
+
+.auth-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
 }
 
 .auth-switch {

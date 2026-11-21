@@ -497,43 +497,45 @@ onMounted(() => {
           </el-table-column>
         </el-table>
 
-        <el-button
-          v-if="detail.status_name === 'paid' && pendingReviews(detail).length"
-          type="primary"
-          class="detail-submit"
-          @click="openReview"
-        >
-          评价商品（{{ pendingReviews(detail).length }}）
-        </el-button>
-        <el-button
-          v-if="isPaid(detail)"
-          type="danger"
-          plain
-          class="detail-submit"
-          :loading="refunding === detail.order_no"
-          @click="refund(detail.order_no)"
-        >
-          申请退款
-        </el-button>
-        <el-button
-          v-if="isPending(detail)"
-          type="success"
-          class="detail-submit"
-          :loading="paying === detail.order_no"
-          @click="pay(detail.order_no)"
-        >
-          模拟支付
-        </el-button>
-        <el-button
-          v-if="isPending(detail)"
-          type="danger"
-          plain
-          class="detail-submit"
-          :loading="cancelling === detail.order_no"
-          @click="cancel(detail.order_no)"
-        >
-          取消订单
-        </el-button>
+        <div class="detail-actions">
+          <el-button
+            v-if="detail.status_name === 'paid' && pendingReviews(detail).length"
+            type="primary"
+            class="detail-submit"
+            @click="openReview"
+          >
+            评价商品（{{ pendingReviews(detail).length }}）
+          </el-button>
+          <el-button
+            v-if="isPaid(detail)"
+            type="danger"
+            plain
+            class="detail-submit"
+            :loading="refunding === detail.order_no"
+            @click="refund(detail.order_no)"
+          >
+            申请退款
+          </el-button>
+          <el-button
+            v-if="isPending(detail)"
+            type="success"
+            class="detail-submit"
+            :loading="paying === detail.order_no"
+            @click="pay(detail.order_no)"
+          >
+            模拟支付
+          </el-button>
+          <el-button
+            v-if="isPending(detail)"
+            type="danger"
+            plain
+            class="detail-submit"
+            :loading="cancelling === detail.order_no"
+            @click="cancel(detail.order_no)"
+          >
+            取消订单
+          </el-button>
+        </div>
       </template>
     </el-drawer>
 

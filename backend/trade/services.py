@@ -189,7 +189,7 @@ def _apply_transition(order: Order, target: int, *, extra=None, fields=None) -> 
 def _create_locked(user, items: list[dict], user_coupon_id, token, remark, address_snapshot) -> Order:
     now = timezone.now()
     skus = _lock_skus(items)
-    _ensure_on_shelf(skus, items)
+    product_names = _ensure_on_shelf(skus, items)
 
     total = sum((skus[item["sku_id"]].price * item["qty"] for item in items), Decimal("0.00"))
     user_coupon, discount = _lock_coupon(user, user_coupon_id, total, now)
@@ -218,20 +218,22 @@ def _create_locked(user, items: list[dict], user_coupon_id, token, remark, addre
         remark=remark,
         address_snapshot=address_snapshot,
     )
-    OrderItem.objects.bulk_create(
-        [
+    lines = []
+    for item in items:
+        sku = skus[item["sku_id"]]
+        lines.append(
             OrderItem(
                 order=order,
-                sku=skus[item["sku_id"]],
-                sku_code=skus[item["sku_id"]].sku_code,
-                title=skus[item["sku_id"]].title,
-                unit_price=skus[item["sku_id"]].price,
+                sku=sku,
+                sku_code=sku.sku_code,
+                # 只存规格名的话订单里只剩"茶轴"这种词，看不出买的是什么；商品名一起快照进去。
+                title=f"{product_names[sku.product_id]} {sku.title}"[:120],
+                unit_price=sku.price,
                 qty=item["qty"],
-                subtotal=skus[item["sku_id"]].price * item["qty"],
+                subtotal=sku.price * item["qty"],
             )
-            for item in items
-        ]
-    )
+        )
+    OrderItem.objects.bulk_create(lines)
     return order
 
 
@@ -242,12 +244,13 @@ def _lock_skus(items: list[dict]) -> dict[int, SKU]:
     return {sku.pk: sku for sku in locked}
 
 
-def _ensure_on_shelf(skus: dict[int, SKU], items: list[dict]) -> None:
+def _ensure_on_shelf(skus: dict[int, SKU], items: list[dict]) -> dict[int, str]:
+    """校验商品在架与库存；返回在架商品的 id → 名称，下单快照要拿它拼标题。"""
     # 商品的上架状态另查一次：select_for_update 带 select_related 会连 product 行一起锁，
     # 而 product 行对本事务没有并发意义。
-    active_products = set(
+    active_products = dict(
         Product.objects.filter(pk__in={sku.product_id for sku in skus.values()}, is_active=True).values_list(
-            "pk", flat=True
+            "pk", "name"
         )
     )
     for item in items:
@@ -256,6 +259,7 @@ def _ensure_on_shelf(skus: dict[int, SKU], items: list[dict]) -> None:
             raise BusinessError("PRODUCT_OFF_SHELF", "商品不存在或已下架", status.HTTP_409_CONFLICT)
         if sku.stock < item["qty"]:
             raise BusinessError("STOCK_NOT_ENOUGH", f"{sku.title} 库存不足", status.HTTP_409_CONFLICT)
+    return active_products
 
 
 def _lock_coupon(user, user_coupon_id, total: Decimal, now) -> tuple[UserCoupon | None, Decimal]:

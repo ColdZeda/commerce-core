@@ -115,8 +115,14 @@ function logout() {
     <nav class="site-nav">
       <div class="wrap site-nav-in">
         <RouterLink
-          class="nav-all"
+          to="/"
+          :class="{ on: route.path === '/' }"
+        >
+          首页
+        </RouterLink>
+        <RouterLink
           to="/products"
+          :class="{ on: route.path === '/products' && !route.query.category }"
         >
           全部商品
         </RouterLink>
@@ -124,6 +130,7 @@ function logout() {
           v-for="category in CATEGORIES"
           :key="category.value"
           :to="{ name: 'products', query: { category: category.value } }"
+          :class="{ on: route.query.category === category.value }"
         >
           {{ category.label }}
         </RouterLink>

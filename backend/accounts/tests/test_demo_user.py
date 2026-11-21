@@ -68,6 +68,8 @@ def test_staff_flag_creates_admin(monkeypatch):
 
     user = User.objects.get(username="admin")
     assert user.is_staff is True
+    # 只有 is_staff 进后台是空白页（没有模型权限），所以演示后台给的是超级用户。
+    assert user.is_superuser is True
     assert "管理员账号" in output
 
 
@@ -88,5 +90,6 @@ def test_staff_flag_promotes_an_existing_account_without_touching_password(monke
     user = User.objects.get(username="promote")
     # 只补权限，口令不动：不该为了进后台逼人改口令。
     assert user.is_staff is True
+    assert user.is_superuser is True
     assert user.check_password("keep-me-123")
     assert "已补成管理员" in output

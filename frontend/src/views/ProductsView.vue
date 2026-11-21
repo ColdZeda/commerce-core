@@ -112,25 +112,6 @@ watch(() => route.fullPath, load, { immediate: true })
       <span class="catalog-result">{{ heading }} · 共 {{ total }} 件</span>
     </div>
 
-    <div class="catalog-bar catalog-bar-pills">
-      <button
-        class="pill"
-        :class="{ on: !activeCategory }"
-        @click="go({ category: undefined })"
-      >
-        全部
-      </button>
-      <button
-        v-for="category in CATEGORIES"
-        :key="category.value"
-        class="pill"
-        :class="{ on: activeCategory === category.value }"
-        @click="go({ category: category.value })"
-      >
-        {{ category.label }}
-      </button>
-    </div>
-
     <el-skeleton
       v-if="loading"
       :rows="6"
