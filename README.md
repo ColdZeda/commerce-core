@@ -1,21 +1,30 @@
 # commerce-core
 
-一个可运行、可测试、可部署的电商交易闭环：注册 → 登录 → 领券 → 按 SKU 下单 → 取消 / 超时关单 → 模拟支付。
+一个能跑、能测、能部署的电商交易闭环：注册 → 浏览 → 加购 / 立即购买 → 选地址 → 下单 → 支付 → 退款 → 评价，
+外加一个免登录的对账看板，证明库存没有凭空消失。
 
 **线上演示**：<http://120.24.67.82:8080>（无域名、无 HTTPS，端口 8080）
+**演示账号**：`demo` / `demo1234` —— 公开账号，数据都是 seed 造的假数据，支付与退款都是 mock。
 
-本项目只做下面三条，每条都有可复现的证据：
-
-1. **下单不超卖**——并发守恒断言，且把保护拿掉测试必须变红；
-2. **重复请求只有一个结果**——同 `client_token` 重放、重复取消、重复支付、重复回调都不产生第二次副作用；
-3. **异步任务与同步链路共享同一套状态迁移**——取消和超时关单不会双回补。
-
-> 这是求职作品。Django / MySQL / Celery 部分是**项目级实操**，不是生产级高并发经验。
+> 这是求职作品。Django / MySQL / Celery 部分是**项目级实操**，不是生产级高并发经验；
 > 压测只验证并发正确性与耗时量级，不提供 QPS 结论。
+
+## 这份代码想证明什么
+
+一期（S0–S8）证明三件事，每条都有可复现的证据：
+
+1. **下单不超卖** —— 并发守恒断言，把保护拿掉测试必须变红；
+2. **重复请求只有一个结果** —— 同 `client_token` 重放、重复取消、重复支付、重复退款、重复回调，
+   都不产生第二次副作用；
+3. **同步与异步共用一套状态迁移** —— 用户取消和 beat 超时关单不会双回补。
+
+二期（S9–S14）把它补成一个"点进去像回事"的店：30 个带图商品与六类目、购物车（逐行勾选）、
+收货地址与下单快照、评论评分、整单退款、注册与登录限流、运营后台、对账看板、一条命令起站。
+一期结论没有推翻，只是外面多了一层壳。
 
 ---
 
-## 1. 运行环境
+## 1. 线上环境
 
 | 项 | 值 |
 |---|---|
@@ -24,27 +33,29 @@
 | 容器 | 6 个：api(uWSGI) / web(nginx+静态) / worker / beat / mysql / redis |
 | 内存实测 | 容器合计约 **413 MiB**，系统 available **759 MB** |
 | 部署方式 | push 到 main → GitHub Actions → ACR → ssh 上线 |
+| 数据 | 30 个商品（6 类 × 5，都有图有详情）、35 个 SKU、3 张券、5 条演示订单、2 条评价 |
 
-**演示账号**：`demo` / `demo1234`（仅线上；本地要自己建，见 §6）
+**演示账号**：`demo` / `demo1234`（仅线上；本地要自己建，见 §7）
 
-这是**公开的演示账号**：数据都是 `seed_demo` 造的假数据，支付是 mock，没有真实用户信息。
-口令写在仓库里是因为它本来就要给访问者用，不是任何真实系统的凭据。
+这是**公开的演示账号**：数据都是 `seed_demo` / `seed_demo_orders` 造的假数据，支付是 mock，
+没有真实用户信息。口令写在仓库里是因为它本来就要给访问者用，不是任何真实系统的凭据。
 要换口令：`DEMO_PASSWORD=新口令 python manage.py create_demo_user --reset`；
 不给 `DEMO_PASSWORD` 就随机生成并只打印一次。
 
 `/api/v1/orders` 需要登录（401），这是设计如此——订单接口不开放匿名访问。
+访客也可以自己点「注册」建号，注册成功即登录并送一张「新客满 49 减 5」。
 
 ---
 
 ## 2. 界面
 
 前端是 Vue 3 + Element Plus，主题来自一组 CSS 变量（米白底 + 陶土橙 #c2410c）。
-下面四张都取自线上环境（`demo` 账号）。
+下面几张图都取自线上环境。
 
 ![首页](docs/images/ui-home.png)
 
 **首页**：banner、六个分类入口、可领的券、热销与新品两排。商品图是随前端打包的 SVG，
-30 个商品各一张，不走上传也不外链。
+30 个商品各一张，不走上传也不外链。"热销"是后台手选的 8 个，不是销量排序——不造假数据。
 
 ![商品列表](docs/images/ui-products.png)
 
@@ -63,23 +74,29 @@
 
 ![订单列表](docs/images/ui-orders.png)
 
-**订单列表**：待支付、已取消、已支付三种状态并存；操作列按状态给不同入口——待支付有「支付 / 取消」，终态只剩「详情」。
+**订单列表**：待支付 / 已支付 / 已取消 / 已关闭 / 已退款五个页签；
+操作列按状态给不同入口——待支付有「支付 / 取消」，已支付有「退款」，终态只剩「详情」。
+
+![退款](docs/images/ui-refund.png)
+
+**退款**：整单退，弹窗里可以填一句原因（不填也行）。退完库存和券一起回来，
+详情里多出退款时间、退款原因，进度时间线多一个节点。
 
 ![对账看板](docs/images/ui-audit.png)
 
 **对账看板**（`/audit`，免登录只读）：按 SKU 列出初始、已售、回补、账面与明细合计。
-两条恒等式都成立才算"平"——「初始 − 已售 = 账面」与「已售 + 回补 = 明细合计」。只统计数量，不含用户信息。
+两条恒等式都成立才算"平"——「初始 − 已售 = 账面」与「已售 + 回补 = 明细合计」，只统计数量，不含用户信息。
 
 ---
 
-## 3. 调用链路与状态机
+## 3. 交易链路与状态机
 
 ```mermaid
 flowchart LR
   U["浏览器 / Vue 3 SPA"] -->|8080| N["web · nginx<br/>静态 + /api 反代"]
   N -->|/api/v1| A["api · uWSGI 2×2<br/>Django + DRF"]
   A --> MY[("mysql 8<br/>订单 / 库存 / 券")]
-  A -.->|健康检查| RD[("redis 7<br/>broker")]
+  A -.->|健康检查| RD[("redis 7<br/>broker + 限流计数")]
   BT["beat · 每 60 秒"] -->|投递| RD
   RD -->|消费| W["worker · Celery"]
   W -->|关单 / 回补| MY
@@ -122,7 +139,7 @@ sequenceDiagram
 
 **关单是异步的**：beat 每分钟投递任务，worker 扫出过期订单，每单走和"用户取消"完全相同的 service。
 
-订单只有 4 个状态、3 条合法迁移：
+订单有 5 个状态、4 条合法迁移：
 
 ```mermaid
 stateDiagram-v2
@@ -130,6 +147,7 @@ stateDiagram-v2
   state "PAID" as PD
   state "CANCELLED" as C
   state "CLOSED" as CL
+  state "REFUNDED" as RF
 
   [*] --> P: 创建订单
   P: 已扣库存、已核销券
@@ -137,27 +155,64 @@ stateDiagram-v2
   P --> PD: /pay 或支付回调
   P --> C: 用户取消
   P --> CL: beat 超时 15 分钟
+  PD --> RF: /refund（整单）
 
-  PD: 终态 · 只写 paid_at，无出口（退款不在范围内）
+  PD: 已付款
   C: 终态 · 已回补库存、退券
   CL: 终态 · 已回补库存、退券
+  RF: 终态 · 已回补库存、退券
 ```
 
-状态迁移写在 `trade/rules.py` 的一张表里，执行靠 `services._apply_transition` 的**单条条件 UPDATE**
-（`WHERE status=<旧状态>`），rowcount=1 的那一方才执行副作用。取消和关单同时到达时，只有一个人是赢家。
+状态迁移写在 `trade/rules.py` 的一张表里，每条声明"从哪到哪、必须发生哪些副作用"：
+
+```python
+Transition(source=PAID, target=REFUNDED, effects=(RESTOCK, RETURN_COUPON))
+```
+
+执行靠 `services._apply_transition` 的**单条条件 UPDATE**（`WHERE pk=? AND status=<旧状态>`），
+rowcount=1 的那一方才执行副作用。取消、关单、退款同时到达时，只有一个人是赢家——
+退款加进来没有改执行器，只是往表里多了一行。
+`RULES` 同时是两个接口的判错依据：查不到规则就是"当前状态不能这么迁"，返回 409。
 
 ---
 
-## 4. 设计取舍
+## 4. 对账：用两条恒等式证明库存守恒
+
+`GET /api/v1/audit` 免登录只读，前端 `/audit` 一张表。
+
+按 SKU 列：初始 / 已售 / 回补 / 账面 / 明细合计 / 差额 / 状态。
+
+```
+已售 = 待支付 + 已支付订单里该 SKU 的明细数量
+回补 = 已取消 + 已关闭 + 已退款订单里该 SKU 的明细数量
+
+账面 = 初始 - 已售                  （第一条：账面对得上）
+已售 + 回补 = 明细合计               （第二条：明细也对得上）
+```
+
+两条同时成立才算"平"。为什么减的是"已售"而不是全部明细：取消、关闭、退款都已经通过回补
+把货还回来了，重复扣会把账算错；"回补"单独列出来只是给人看"退了多少"，不参与第一条等式。
+
+**为此加了 `SKU.initial_stock`**（建档时的库存基线）。没有基线，"账面该是多少"只能反推，
+看板就成了摆设。基线只在 SKU 第一次落库时写入，之后改库存不动它——所以**绕过接口直接改库存会让看板变红**，
+这正是想要的信号。历史数据由 `catalog/0004` 回填：`初始 = 当前库存 + 净已售`。
+
+---
+
+## 5. 设计取舍
 
 | 问题 | 做法 | 为什么 |
 |---|---|---|
 | 订单为什么要明细快照 | `OrderItem` 存 `title/unit_price/sku_code`，不靠 join SKU 现算 | 改价、下架、SKU 删除都不该改变历史订单 |
 | 为什么唯一约束不够 | 领券：唯一索引只挡"同一人领同一张"，挡不住超发 → 条件更新 `issued_qty + 1 WHERE issued_qty < total_qty`；下单：`client_token` 唯一索引 + **捕获冲突后回查，且在 atomic 块之外** | 唯一冲突一旦在事务内回查，就会读到未提交前的快照或直接报错；先提交再查才是确定的 |
-| 为什么取消/关单共用 service | 两者都只做"PENDING → 终态"，副作用一样 | 两套代码必然演化出双回补 |
+| 为什么取消/关单/退款共用一套副作用 | 三者都只是"把货和券还回去"，写在 `effects` 里 | 各写一套必然演化出双回补 |
+| 为什么重复退款返回 409 而不是幂等 200 | 取消是幂等的，退款不是 | 钱的动作重复请求要能被看见，而不是静默返回同一张单 |
+| 为什么退款后判状态要用当前读 | 失败分支用 `select_for_update()` 再读一次 | RR 隔离级别下普通 SELECT 可能是旧快照，会把"已经退过"误判成"状态不对" |
 | 为什么乐观锁 B 不进主流程 | 热点行 50 并发下 B 只成交 38–40/100 | 有限重试在热点上必然放弃一部分；这是取舍不是缺陷，但主流程要的是"排队的确定性" |
 | 为什么 Redis 预扣 C 做了却不接主流程 | C 有真 Lua、补偿、对账，全部进 CI | 引入跨存储一致性就引入新的故障面；本项目的重点是"能证明"，不是"组件多" |
 | 为什么 mock 支付也能讲幂等 | `/pay` 与 `/payments/callback` 共用 `mark_order_paid` | 幂等逻辑不依赖支付通道真假 |
+| 为什么限流在 Redis 故障时放行 | 只记一条 warning，不拦请求 | 注册与登录是演示站唯一入口；"能用但不设防"优于"整站没人能注册" |
+| 为什么后台禁止改订单状态 | admin 里订单/券全只读（`has_*_permission` 返回 False） | 状态只能由接口那条条件更新推进，后台能改就是绕过状态机，回补和幂等立刻失真 |
 
 ### 库存三方案的实测（同一台开发机，2026-11-11）
 
@@ -184,15 +239,15 @@ stateDiagram-v2
 
 ---
 
-## 5. 接口
+## 6. 接口
 
 基线 `/api/v1`，`Authorization: Bearer <access>`，JSON；金额是字符串，时间是带时区的 ISO8601；
 列表统一 `{count,next,previous,results}`；错误统一 `{code,message,detail?}`，前端只看 `code`。
 
 | # | 方法与路径 | 鉴权 | 要点 |
 |---|---|---|---|
-| 1 | `POST /auth/register` | 匿名 | 201；成功即返回 token；自动发新人券；撞名/弱口令 400 |
-| 2 | `POST /auth/login` | 匿名 | 返回 access/refresh/user |
+| 1 | `POST /auth/register` | 匿名 | 201；成功即返回 token；自动发新人券；撞名/弱口令 400；限 10 次/小时/IP |
+| 2 | `POST /auth/login` | 匿名 | 返回 access/refresh/user；限 30 次/分钟/IP + 5 次/分钟/用户名 |
 | 3 | `POST /auth/refresh` | 匿名 + refresh | 换新 access |
 | 4 | `GET /auth/me` | 登录 | 刷新页面恢复会话 |
 | 5 | `GET /products` | 匿名 | 分页、`keyword`、`category`、`is_featured`、排序白名单 |
@@ -200,73 +255,92 @@ stateDiagram-v2
 | 7 | `GET /coupons` | 可选 | 登录时带 `claimed` |
 | 8 | `POST /coupons/{id}/claim` | 登录 | 201；重复/售罄 409 业务码 |
 | 9 | `GET /me/coupons` | 登录 | `status=unused/used/expired` |
-| 10 | `GET /cart/items` | 登录 | 整车快照 + 合计；每行带 `available` |
+| 10 | `GET /cart/items` | 登录 | 整车快照 + 合计；每行带 `selected` 与 `available` |
 | 11 | `POST /cart/items` | 登录 | 同 SKU 累加；下架 409 `PRODUCT_OFF_SHELF`、超库存 409 `STOCK_NOT_ENOUGH` |
-| 12 | `PATCH /cart/items/{id}` | 登录 | 改数量；越权 404 |
-| 13 | `DELETE /cart/items/{id}` | 登录 | 删一行；越权 404 |
-| 14 | `GET/POST /addresses` | 登录 | 只操作本人地址；第一条自动默认 |
-| 15 | `PATCH/DELETE /addresses/{id}` | 登录 | 越权 404；删默认后自动顶一条 |
-| 16 | `POST /orders` | 登录 | 201 新建；同 `client_token` 重放 200 + `X-Idempotent-Replay`；`items` 与 `from_cart` 二选一；`address_id` **必填**并拍成快照 |
-| 17 | `GET /orders` | 登录 | 仅本人，按状态筛选 |
-| 18 | `GET /orders/{order_no}` | 登录 | 他人订单一律 404，不泄露存在性；含 `address_snapshot` 与明细的 `reviewed` |
-| 19 | `POST /orders/{order_no}/cancel` | 登录 | PENDING→CANCELLED；已取消返回 200 |
-| 20 | `POST /orders/{order_no}/pay` | 登录 + `ENABLE_MOCK_PAY` | PENDING→PAID；已支付幂等 200 |
-| 21 | `GET /products/{id}/reviews` | 匿名 | 分页 + `summary{count,average}`；用户名掩码 |
-| 22 | `POST /orders/{order_no}/review` | 登录 | 仅已支付订单；一批明细整批原子；一条明细只能评一次 |
-| 23 | `GET /audit` | 匿名 | 对账看板：按 SKU 的初始/已售/回补/账面/明细合计，券与订单计数；不含用户信息 |
-| 24 | `POST /payments/callback` | 匿名 + HMAC | 已支付 200 + `idempotent`；CLOSED/CANCELLED 409 |
+| 12 | `PATCH /cart/items` | 登录 | 全选 / 取消全选 |
+| 13 | `PATCH /cart/items/{id}` | 登录 | 改数量或勾选；越权 404 |
+| 14 | `DELETE /cart/items/{id}` | 登录 | 删一行；越权 404 |
+| 15 | `GET/POST /addresses` | 登录 | 只操作本人地址；第一条自动默认 |
+| 16 | `PATCH/DELETE /addresses/{id}` | 登录 | 越权 404；删默认后自动顶一条 |
+| 17 | `POST /orders` | 登录 | 201 新建；同 `client_token` 重放 200 + `X-Idempotent-Replay`；`items` 与 `from_cart` 二选一；`address_id` **必填**并拍成快照 |
+| 18 | `GET /orders` | 登录 | 仅本人，按 `pending/paid/cancelled/closed/refunded` 筛选 |
+| 19 | `GET /orders/{order_no}` | 登录 | 他人订单一律 404，不泄露存在性；含 `address_snapshot`、`refunded_at` 与明细的 `reviewed` |
+| 20 | `POST /orders/{order_no}/cancel` | 登录 | PENDING→CANCELLED；已取消返回 200 |
+| 21 | `POST /orders/{order_no}/pay` | 登录 + `ENABLE_MOCK_PAY` | PENDING→PAID；已支付幂等 200 |
+| 22 | `POST /orders/{order_no}/refund` | 登录 | PAID→REFUNDED，整单；非 PAID 409 `ORDER_STATUS_INVALID`，重复退 409 `ORDER_ALREADY_REFUNDED`，他人 404 |
+| 23 | `GET /products/{id}/reviews` | 匿名 | 分页 + `summary{count,average}`；用户名掩码 |
+| 24 | `POST /orders/{order_no}/review` | 登录 | 仅已支付订单；一批明细整批原子；一条明细只能评一次 |
+| 25 | `GET /audit` | 匿名 | 对账看板：按 SKU 的初始/已售/回补/账面/明细合计，券与订单计数；不含用户信息 |
+| 26 | `POST /payments/callback` | 匿名 + HMAC | 已支付 200 + `idempotent`；CLOSED/CANCELLED 409；**退款后的订单也 409** |
 | — | `GET /health` | 匿名 | 校验 db **与 redis**；任一不可用 503 |
-
-`POST /auth/register` 限 10 次/小时/IP；`POST /auth/login` 限 30 次/分钟/IP + 5 次/分钟/用户名，
-超限 429 + `Retry-After`。
 
 回调签名：`HMAC-SHA256(order_no|trade_no|amount|timestamp)`，`compare_digest` 比较，
 时间窗 ±300 秒，金额以服务端应付为准。
 
 ---
 
-## 6. 本地运行
+## 7. 本地运行
 
 前置：Python 3.12、Node 24、Docker Desktop。
 
-后端依赖装在本机 venv 里——后面本地跑 `manage.py`、跑 Celery 都从这里出：
+**一条命令**（起 Docker、迁移、seed、前后端 :8000 与 :5173，Ctrl+C 一起停）：
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
+```
+
+`-NoServers` 只准备环境不起服务，`-SkipSeed` 跳过种子数据。脚本会做这几步：
+
+```
+检查 docker/npm → 起 MySQL+Redis → 等 MySQL healthy → 装后端依赖（缺才装）
+→ 迁移 → seed_demo → 装前端依赖（缺才装）→ 起 :8000 与 :5173 → 等两边都通
+```
+
+想手动来一遍，等价的操作是：
+
+```bash
 cd backend
 py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements-dev.txt
 cd ..
-```
 
-起最小栈并灌演示数据：
-
-```bash
 cp .env.example .env                      # 填 DJANGO_SECRET_KEY 与 MYSQL_*，密码自己生成
 
 docker compose -f deploy/docker-compose.yml --env-file .env up -d mysql redis
 docker compose -f deploy/docker-compose.yml --env-file .env build api     # 显式重建，避免用上旧镜像
 docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py migrate
 docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py seed_demo
+docker compose -f deploy/docker-compose.yml --env-file .env run --rm api python manage.py seed_demo_orders
 docker compose -f deploy/docker-compose.yml --env-file .env up -d api
 ```
 
 > `build api` 那一步别省：compose 只在镜像不存在时才构建，本地留着几天前的镜像就会跑到旧代码，
 > 症状是接口 404 而 `/health` 仍然 200。
 
-**建一个能登录的账号**：`seed_demo` 只造商品与券，不造用户（新库上 users=0）。
-现在可以直接在首页点「注册」自助建号，也可以预置一个演示账号：
+**三条 seed 命令**，顺序是建号 → 商品/券 → 订单/评价，都能重复跑：
+
+| 命令 | 管什么 | 依赖 |
+|---|---|---|
+| `create_demo_user` | 账号（`demo` 普通用户；`--staff` 再建一个管理员） | 无 |
+| `seed_demo` | 30 个商品、6 个分类、3 张券 | 无 |
+| `seed_demo_orders` | 五个固定单号 `ODDEMO0001`–`ODDEMO0005`，覆盖五种状态 + 两条评价 | 需要 `demo` 账号先存在 |
+
+`seed_demo_orders` 全部走真实 service（下单 / 支付 / 取消 / 关单 / 退款），跑完用看板的同一套逻辑自检，
+账不平就整批回滚并报错——不走 service 直接改状态，库存不会跟着动，看板立刻变红。
 
 ```powershell
 cd backend
 $env:DEMO_PASSWORD = "demo1234"           # 不设就随机生成、只打印这一次
 .venv\Scripts\python manage.py create_demo_user
+.venv\Scripts\python manage.py seed_demo
+.venv\Scripts\python manage.py seed_demo_orders
 cd ..
 ```
 
 > 线上那个 `demo` / `demo1234` 是同一条命令在服务器上建的，口令与本地无关：
 > 本地口令就是上面 `DEMO_PASSWORD` 给的值。命令幂等，账号已存在会跳过，改口令要加 `--reset`。
 
-**本地想点「模拟支付」**：compose 里的 api 容器用的是 `config.settings.prod`（和线上一致），
+**本地想点「模拟支付 / 退款」**：compose 里的 api 容器用的是 `config.settings.prod`（和线上一致），
 而 prod 的 `ENABLE_MOCK_PAY` 默认是 `false`，所以要在 `.env` 里加一行再重建容器：
 
 ```bash
@@ -299,6 +373,14 @@ cd deploy && docker compose -f docker-compose.prod.yml run --rm -T api python ma
 
 > 容器名与本地栈相同，两套不能同时起；`docker compose run` 在无 TTY 的环境必须加 `-T`。
 
+**运营后台**：`/admin/` 公网是 404（C1：nginx 只放 127.0.0.1 与内网网段）。要用 SSH 隧道：
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 aliyun     # 然后浏览器开 http://127.0.0.1:8080/admin/
+```
+
+后台里商品可编辑（封面缩略图、分类/热销/上下架筛选），订单与券只读。
+
 **Windows 上 MySQL 起不来？** 报 `ports are not available: ... 127.0.0.1:3307` 通常不是被别的程序占了，
 而是 3307 落在了 Hyper-V 的保留端口区间（重启后区间会变）：
 
@@ -310,18 +392,26 @@ netsh interface ipv4 show excludedportrange protocol=tcp   # 看 3307 是否在�
 
 ---
 
-## 7. 测试与 CI
+## 8. 测试与 CI
 
 ```bash
-cd backend && pytest -q                    # 全部用例，需要真实 MySQL/Redis
+cd backend && pytest -q                    # 232 个用例，需要真实 MySQL/Redis
 cd backend && pytest -q -m concurrency     # 真实 MySQL 并发用例
 cd backend && ruff check . && ruff format --check .
-python scripts/check_comments.py backend   # 注释规范（本项目把注释当验收项）
+python scripts/check_comments.py backend   # 注释规范（本项目把注释当验收项，密度 2.3%）
 cd frontend && npm run lint
 ```
 
 测试不 mock 数据库：并发用例用独立连接开线程打真实 MySQL，断言的是**守恒**
 （`剩余 + 成交 = 初始库存`）而不是"没报错"。CI 里 pytest 这一步连同环境准备约 1 分钟。
+
+几个容易被漏掉的用例：
+
+- 取消与关单并发 → 只回补一次（`trade/tests/test_order_concurrency.py`）
+- 同一订单并发退款 6 次 → 1 次成交、5 次 409，库存只补一次（`trade/tests/test_refund.py`）
+- 退款后 `/audit` 两条恒等式仍然成立（`test_audit_stays_balanced_after_refund`）
+- 手工改库存 → 看板必须变红（`audit/tests/test_audit_api.py`）
+- 后台 POST 订单/券 → 一律 403（`trade/tests/test_admin_readonly.py`）
 
 CI（`.github/workflows/ci.yml`）：
 
@@ -334,7 +424,7 @@ main push  →  build & push（api 与 web 镜像，sha tag，推 ACR）
 
 ---
 
-## 8. 部署与回滚
+## 9. 部署与回滚
 
 镜像**只在 CI 构建**（服务器 1.6 GiB 会 OOM）。服务器只 `pull` + `up -d`。
 
@@ -365,30 +455,32 @@ pull → migrate → up -d --remove-orphans → 60 秒内等 health 与首页都
 
 ---
 
-## 9. 目录结构
+## 10. 目录结构
 
 ```
 backend/
   config/      settings 分层（base/dev/prod）、URL 根表、分页、异常收口、Celery 应用
-  accounts/    注册/登录/刷新/me、Bearer 认证、token 错误分类、演示账号命令
+  accounts/    注册/登录/刷新/me、Bearer 认证、token 错误分类、限流、演示账号命令
   catalog/     商品与 SKU：分类与封面、列表/详情、admin、seed_demo（30 个商品）
   promotion/   券与用户券：领取（含并发约束）、我的券、新人券
   cart/        购物车：加购/改量/删除、逐行勾选、整车快照、从车结算的入参转换
   address/     收货地址：增删改查、默认地址唯一、下单快照
   review/      评论：一条明细一次、仅已支付订单可评、商品页评分聚合
   audit/       对账看板：SKU 维度的库存守恒、券与订单计数（免登录只读）
-  trade/       订单：状态规则表、下单/取消/关单/支付 service、回调签名、关单任务、六个接口
+  trade/       订单：状态规则表、下单/取消/关单/支付/退款 service、回调签名、关单任务、
+               演示订单命令 seed_demo_orders
   stocklab/    库存实验区：B 乐观锁对照、C 的 Redis+Lua 预扣/补偿/对账、压测脚本（不接主流程）
-  health/      就绪探针      common/  抽象模型与业务错误      scripts/  冒烟与依赖锁检查
-frontend/      Vue 3 SPA：/、/products、/products/:id、/cart、/addresses、/login、/register、/orders
-               商品线稿 SVG 在 public/img/products/（30 张）
+  health/      就绪探针      common/  抽象模型、业务错误、限流工具      scripts/  冒烟与依赖锁检查
+frontend/      Vue 3 SPA：/、/products、/products/:id、/cart、/addresses、/audit、
+               /login、/register、/orders；商品线稿 SVG 在 public/img/products/（30 张）
 deploy/        compose（本地/生产）、Dockerfile（api）、Dockerfile.web、nginx conf、uwsgi.ini
+scripts/       dev-up.ps1（一键起站）、check_comments.py（注释规范）
 docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶段证据）
 ```
 
 ---
 
-## 10. 故障与处理记录
+## 11. 故障与处理记录
 
 | 问题 | 现象 | 处置 |
 |---|---|---|
@@ -399,32 +491,37 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 | 服务器迁移命令"执行成功但退出码非零" | 无 TTY 时 `docker compose run` 的容器判定失败 | 一律加 `-T` |
 | 高并发下连接数打满 | stocklab 50 线程 + 应用连接 > 50 | 本地 compose `max_connections=120`（线上仍 50，线上并发由 uWSGI 2×2 限制） |
 | 乐观锁"卖不完" | 50 并发只成交 38–40/100 | **保留为结论**：有限重试在热点行上必然放弃一部分，加一列 10 次重试做对照 |
+| 退款把库存补了、看板却红了 | 对账的"回补"口径漏了 `REFUNDED`，退回来的量既不算已售也不算回补 | `RETURNED` 加上 `REFUNDED`；连 `_order_counts` 的标签一起补，并加一条"退款后仍然平"的用例 |
+| `.ps1` 中文全乱、还报语法错 | PowerShell 5.1 按 ANSI 读没有 BOM 的文件 | `.ps1` 存 UTF-8 **带 BOM**；Python / JS / Markdown 不要 BOM |
 
 ---
 
-## 11. 不做的与已知限制
+## 12. 不做的与已知限制
 
-**不做**：短信、第三方登录、真实支付与退款、真实物流、图片上传、ES 搜索、
-完整优惠券引擎、监控告警全家桶、多机/蓝绿部署。后台只用 Django admin（`/admin/` 公网返回 404）。
+**不做**：短信、第三方登录、真实支付通道与真实资金流、真实物流、图片上传、ES 搜索、
+完整优惠券引擎、退款审核流（部分退 / 退货地址）、监控告警全家桶、多机/蓝绿部署。
+后台只用 Django admin，不另建运营系统。
 
 **明确已知的取舍**：
 
 - 公网是 `http://`，没有域名和 HTTPS；`8080` 明文；
-- `ENABLE_MOCK_PAY=true`：**任何登录用户都能把自己的待支付订单标成已支付**。这是演示取舍，
-  不是支付功能；`/payments/callback` 的 HMAC 逻辑是完整的，但没有真实通道验证；
+- `ENABLE_MOCK_PAY=true`：**任何登录用户都能把自己的待支付订单标成已支付**，也能直接整单退款。
+  这是演示取舍，不是支付/退款功能；`/payments/callback` 的 HMAC 逻辑是完整的，但没有真实通道验证；
 - 服务器上 `PAY_CALLBACK_SECRET` 未单独设置时回落到 `SECRET_KEY`；
 - 回滚只回镜像，不回数据库（靠加法迁移保证旧代码能用新库）；
-- 自动部署 = 单机 Compose 重建，重建期间有秒级不可用。
+- 自动部署 = 单机 Compose 重建，重建期间有秒级不可用；
+- 退款后已写的评价保留：评价记录的是"买过并用过"，与订单是否退款无关；
+- 一期的外部审查只覆盖提交 `4ec7f93`，二期新增代码不在其覆盖范围内。
 
 ---
 
-## 12. 项目文档
+## 13. 项目文档
 
 | 文件 | 内容 |
 |---|---|
 | [`docs/plan.md`](docs/plan.md) | 施工基线：范围、硬性约束 C1–C8、阶段与门槛、内存预算与降级顺序 |
 | [`docs/plan-changes.md`](docs/plan-changes.md) | 每次改计划的"之前／现在"，含一次失败分支的重写（部署失败不再切到另一个项目，改为回滚上一版） |
-| [`docs/phases/`](docs/phases) | `phase0.md` … `phase13.md`：每阶段的验收证据 |
+| [`docs/phases/`](docs/phases) | `phase0.md` … `phase14.md`：每阶段的验收证据 |
 | [`STATUS.md`](STATUS.md) | 10 秒指针：现在在哪、下一步、未验证清单 |
 
 每个 `phaseN.md` 都包含实测输出、被推翻的假设和返工记录，例如：
@@ -433,13 +530,16 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 - 停 worker、停 Redis 再恢复的行为记录，不写"必丢/绝不丢"（`phase5.md`）
 - ACR 拒收 buildx attestation、CI 里"步骤 skipped 但 job 变绿"的假绿现场（`phase7.md`）
 - 照着 README 走时踩到的旧镜像 404、mock 支付 403（`phase8.md`）
+- 对账公式写错、"回补"口径漏掉退款会让线上立刻变红（`phase13.md`、`phase14.md`）
 
-## 13. 常见问题
+## 14. 常见问题
 
 - **为什么明细要快照**：历史订单不能因为改价/下架而变。
 - **为什么唯一约束不够**：唯一索引解决"同一个 key 只能有一行"，解决不了"总量不能被超发"，
   后者要靠条件更新加 rowcount 判定。
-- **取消与关单并发怎么保证只回补一次**：两者都走同一条条件 UPDATE，赢家才做副作用。
+- **取消、关单、退款并发怎么保证只回补一次**：三者都走同一条条件 UPDATE，赢家才做副作用。
+- **为什么退款只做整单**：部分退要拆金额、拆库存、拆券，演示站里收益不抵复杂度；
+  整单退已经能证明"状态机 + 副作用 + 对账"这条链。
 - **为什么乐观锁 version 对纯扣减是冗余**：`UPDATE ... WHERE stock >= qty` 本身就是原子的，
   version 只在"读-改-写"跨语句时才有意义；本项目的 B 是完整下单所以需要它。
 - **为什么 C 不接主流程**：跨存储一致性会引入新的故障面，而本项目的目标是证明而不是堆组件。

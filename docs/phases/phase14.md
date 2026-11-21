@@ -99,6 +99,24 @@ stock     -> before=160 after=159
 页面证据（1440×900）：订单抽屉里状态「已退款」、退款时间/原因、时间线第三个节点；
 看板横幅"账是平的"，已退款 3 单、回补 15 件。
 
+## 上线
+
+合回 main：`7e99600`（分支）→ merge `5459cc9`。第一次 CI 在「登录 ACR」这一步失败（login 报错，
+test/lint 都是绿的），空提交 `b33ca39` 重试后 lint / test / build & push / deploy 全绿；
+线上 `current_tag` = `b33ca39`，`previous_tag` = `e61dfff`。
+
+| 项 | 结果 |
+|---|---|
+| `/api/v1/health` | 200，`db: true`、`redis: true` |
+| 迁移 | `trade.0003_order_refund_fields` 由 `deploy.sh` 在 `up -d` 之前跑完 |
+| 容器 | 6 个 Up，api healthy |
+| `seed_demo_orders`（线上跑一次） | 新增演示订单 5 个、评价 2 条；自检 `unbalanced=0` |
+| 页面退款（线上新注册的访客账号） | 下单 → 模拟支付 → 退款全部成功，详情显示已退款、退款时间与原因 |
+| 退款后 `/audit` | 35 个 SKU，`unbalanced=0`；`refunded=2`，`NET-GBE` 库存回到 160 |
+
+README 按 `plan.md` §13.6 做了结构性重写：首屏改成"能证明什么 + 怎么点一遍"，
+补上退款截图与 `seed_demo_orders`，接口表加到 26 条，故障记录加了"回补口径漏掉退款"这一条。
+
 ## 踩到的坑
 
 - **执行器硬编码了 source**：`_apply_transition` 一直是 `RULES[(PENDING, target)]`，
