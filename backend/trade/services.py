@@ -1,4 +1,4 @@
-"""下单与取消：事务边界、加锁顺序、金额与快照都在这里，视图只做收发。"""
+"""下单、取消与退款：事务边界、加锁顺序、金额与快照都在这里，视图只做收发。"""
 
 import secrets
 from datetime import timedelta
@@ -135,12 +135,46 @@ def mark_order_paid(order_no: str, amount, trade_no: str = "") -> tuple[Order, b
         return order, False
 
 
+def refund_order(user, order_no: str, reason: str = "") -> Order:
+    """整单退款；只有本人、只有已支付的订单。
+
+    抛 BusinessError：NOT_FOUND / ORDER_STATUS_INVALID / ORDER_ALREADY_REFUNDED。
+    """
+    with transaction.atomic():
+        order = Order.objects.filter(order_no=order_no, user=user).first()
+        if order is None:
+            # 他人订单同样 404，不能让单号成为探测手段。
+            raise BusinessError("NOT_FOUND", "订单不存在", status.HTTP_404_NOT_FOUND)
+
+        moved = _apply_transition(
+            order,
+            Order.Status.REFUNDED,
+            fields={"refunded_at": timezone.now(), "refund_reason": reason[:200]},
+        )
+        if not moved:
+            # 判错状态必须用当前读：条件更新看到的是最新提交，普通 SELECT 在 RR 下可能还是旧快照，
+            # 会把"已经退过"误判成"状态不对"。
+            current = (
+                Order.objects.select_for_update().filter(pk=order.pk).values_list("status", flat=True).first()
+            )
+            # 重复退款单独给码：客户端据此知道钱已经退过了，而不是"这单类型不对"。
+            if current == Order.Status.REFUNDED:
+                raise BusinessError("ORDER_ALREADY_REFUNDED", "订单已经退过款", status.HTTP_409_CONFLICT)
+            raise BusinessError("ORDER_STATUS_INVALID", "只有已支付的订单可以退款", status.HTTP_409_CONFLICT)
+        order.refresh_from_db()
+        return order
+
+
 def _apply_transition(order: Order, target: int, *, extra=None, fields=None) -> bool:
     """条件更新的唯一执行器；返回是否由本次调用完成迁移（赢家）。
 
+    source 取自刚读到的订单状态，没有对应规则就返回 False，由调用方决定报什么错——
+    这样"现在不能这么迁"是一张表的结论，不是每个 service 各写一遍 if。
     先读状态再 save 的写法在并发下会双回补，见 stocklab/close_lab.py 的反例。
     """
-    rule = RULES[(Order.Status.PENDING, target)]
+    rule = RULES.get((order.status, target))
+    if rule is None:
+        return False
     queryset = Order.objects.filter(pk=order.pk, status=rule.source)
     if extra is not None:
         queryset = queryset.filter(extra)

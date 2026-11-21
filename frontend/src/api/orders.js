@@ -26,3 +26,7 @@ export function payOrder(orderNo) {
     replayed: response.headers['x-idempotent-replay'] === '1',
   }))
 }
+
+export function refundOrder(orderNo, reason) {
+  return http.post(`/orders/${orderNo}/refund`, { reason }).then((response) => response.data)
+}

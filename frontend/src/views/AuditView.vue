@@ -54,7 +54,7 @@ onMounted(load)
         <div><b>{{ report.summary.skus }}</b><small>在册 SKU</small></div>
         <div><b>{{ report.summary.stock_total }}</b><small>账面合计</small></div>
         <div><b>{{ report.summary.sold_total }}</b><small>已售（待支付 + 已支付）</small></div>
-        <div><b>{{ report.summary.restocked_total }}</b><small>回补（取消 + 超时关闭）</small></div>
+        <div><b>{{ report.summary.restocked_total }}</b><small>回补（取消 + 关闭 + 退款）</small></div>
         <div :class="{ warn: report.summary.unbalanced }">
           <b>{{ report.summary.unbalanced }}</b><small>不平的 SKU</small>
         </div>
@@ -184,6 +184,7 @@ onMounted(load)
             <div><b>{{ report.orders.paid }}</b><small>已支付</small></div>
             <div><b>{{ report.orders.cancelled }}</b><small>已取消</small></div>
             <div><b>{{ report.orders.closed }}</b><small>已关闭</small></div>
+            <div><b>{{ report.orders.refunded }}</b><small>已退款</small></div>
             <div><b>{{ report.orders.total }}</b><small>合计</small></div>
           </div>
         </section>

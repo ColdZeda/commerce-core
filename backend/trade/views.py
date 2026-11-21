@@ -24,15 +24,17 @@ from .serializers import (
     OrderDetailSerializer,
     OrderListSerializer,
     OrderPaySerializer,
+    OrderRefundSerializer,
     PaymentCallbackSerializer,
 )
-from .services import cancel_order, create_order, mark_order_paid
+from .services import cancel_order, create_order, mark_order_paid, refund_order
 
 STATUS_BY_NAME = {
     "pending": Order.Status.PENDING,
     "paid": Order.Status.PAID,
     "cancelled": Order.Status.CANCELLED,
     "closed": Order.Status.CLOSED,
+    "refunded": Order.Status.REFUNDED,
 }
 
 
@@ -129,6 +131,16 @@ class OrderPayView(APIView):
         paid, already = mark_order_paid(order.order_no, order.pay_amount, trade_no)
         headers = {"X-Idempotent-Replay": "1"} if already else {}
         return Response(OrderDetailSerializer(_load_with_items(paid)).data, headers=headers)
+
+
+class OrderRefundView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_no: str):
+        payload = OrderRefundSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        order = refund_order(request.user, order_no, payload.validated_data["reason"])
+        return Response(OrderDetailSerializer(_load_with_items(order)).data)
 
 
 class PaymentCallbackView(APIView):

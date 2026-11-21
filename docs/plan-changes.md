@@ -195,6 +195,29 @@
 - **为什么**：这三处都是"实现时才发现计划没说透"的地方，选择标准是同一条——
   让看板能证明点什么、让限流不误伤、让后台不能绕开状态机。
 
+## D-015 退款落地细节（2026-11-21）
+
+- **之前**：`plan.md` §13.4 只写了 `Order.refunded_at` 与 `Order.Status.REFUNDED`；
+  状态迁移执行器 `_apply_transition` 按 `RULES[(PENDING, target)]` 找规则，隐含"只有待支付会迁移"。
+- **现在**：
+  - 订单新增 `refund_reason`，退款接口的 `reason` 落到这一列（与 `cancel_reason` 分开，
+    否则"取消原因"里会混进退款理由）。
+  - `_apply_transition` 的 source 改为**取订单当前状态**，找不到对应规则就返回 False，
+    由各 service 决定报什么错。原来硬编码 `PENDING` 时，`PAID` 的订单走到这里会 KeyError。
+  - **重复退款返回 409 `ORDER_ALREADY_REFUNDED`**，不做幂等 200（取消是幂等的）。
+    钱的动作重复请求要能被看见，而不是静默返回同一张单。
+- **为什么**：三条都是 S14 落地时冒出来的具体问题；状态机本身没改——只往 `TRANSITIONS` 加了一行，
+  副作用仍是 `restock` / `return_coupon`。
+
+## D-016 演示订单 seed 的形态（2026-11-21）
+
+- **之前**：§13.5 只写了"`seed_demo_orders`（新）、幂等、只补缺不覆盖"。
+- **现在**：命令在 `trade` app 下，五个固定单号 `ODDEMO0001`–`ODDEMO0005`（待支付/已支付/已取消/已关闭/已退款）。
+  重跑时按单号跳过；所有状态迁移都调真实 service（`create_order` / `mark_order_paid` / `cancel_order` /
+  `close_order` / `refund_order`），跑完用 `audit.build_report()` 自检，不平就整批回滚并报错。
+- **为什么**：不走 service 直接改状态，库存与券不会跟着动，看板立刻不平——那正是 S13 抓过的那类问题。
+  固定单号比 `get_or_create` 更适合订单：它同时是"这一单造过没有"的判据。
+
 
 
 
