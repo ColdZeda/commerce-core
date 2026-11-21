@@ -1,6 +1,6 @@
-"""订单状态迁移规则：允许哪些迁移、各带哪些副作用、重复请求算什么，都写成数据而不是散落的 if。
+"""订单状态迁移规则：允许哪些迁移、各带哪些副作用，都写成数据而不是散落的 if。
 
-S6 只往 TRANSITIONS 里加 → PAID 一行，迁移的执行方式不再改。
+加一条迁移只改这张表；执行方式（条件更新 + 副作用）对所有迁移是同一套。
 """
 
 from dataclasses import dataclass
@@ -31,11 +31,17 @@ TRANSITIONS = (
         target=Order.Status.CLOSED,
         effects=(RESTOCK, RETURN_COUPON),
     ),
-    # 支付只写 paid_at 这一列，没有跨表副作用；退款不在本项目范围内。
+    # 支付只写 paid_at 这一列，没有跨表副作用。
     Transition(
         source=Order.Status.PENDING,
         target=Order.Status.PAID,
         effects=(),
+    ),
+    # 整单退款：钱退回去，货和券也得回到下单前，所以复用取消/关单那两条副作用。
+    Transition(
+        source=Order.Status.PAID,
+        target=Order.Status.REFUNDED,
+        effects=(RESTOCK, RETURN_COUPON),
     ),
 )
 

@@ -3,13 +3,13 @@
 口径（按 SKU）：
     账面      = sku.stock（当前列）
     已售      = 待支付 + 已支付订单里该 SKU 的明细数量
-    回补      = 已取消 + 已关闭订单里该 SKU 的明细数量
+    回补      = 已取消 + 已关闭 + 已退款订单里该 SKU 的明细数量
     明细合计  = 全部订单明细数量
     初始      = sku.initial_stock（建档时的基线）
     应有账面  = 初始 - 已售
 
     为什么减的是"已售"而不是"明细合计"：已售只算还在占用库存的订单（待支付/已支付），
-    取消和关闭的明细已经通过 restock 还回去了，重复扣会把账算错。
+    取消、关闭和退款的明细已经通过 restock 还回去了，重复扣会把账算错。
     回补单独列出来是给人看"退了多少"，不参与这条等式。
 
 会计恒等式有两条：`应有账面 == 账面`、`已售 + 回补 == 明细合计`。
@@ -24,7 +24,7 @@ from promotion.models import Coupon, UserCoupon
 from trade.models import Order, OrderItem
 
 PENDING_PAID = [Order.Status.PENDING, Order.Status.PAID]
-RETURNED = [Order.Status.CANCELLED, Order.Status.CLOSED]
+RETURNED = [Order.Status.CANCELLED, Order.Status.CLOSED, Order.Status.REFUNDED]
 
 
 def _sku_rows() -> list[dict]:
@@ -88,8 +88,9 @@ def _order_counts() -> dict:
         Order.Status.PAID: "paid",
         Order.Status.CANCELLED: "cancelled",
         Order.Status.CLOSED: "closed",
+        Order.Status.REFUNDED: "refunded",
     }
-    counts = {"pending": 0, "paid": 0, "cancelled": 0, "closed": 0}
+    counts = {"pending": 0, "paid": 0, "cancelled": 0, "closed": 0, "refunded": 0}
     for row in Order.objects.values("status").annotate(count=Count("id")):
         counts[labels[int(row["status"])]] = row["count"]
     counts["total"] = sum(counts.values())

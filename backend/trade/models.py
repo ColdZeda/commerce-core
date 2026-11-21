@@ -14,6 +14,7 @@ class Order(TimeStampedModel):
         PAID = 1, "已支付"
         CANCELLED = 2, "已取消"
         CLOSED = 3, "已关闭"
+        REFUNDED = 4, "已退款"
 
     order_no = models.CharField(max_length=32, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders")
@@ -32,8 +33,10 @@ class Order(TimeStampedModel):
     # 下单时的地址副本：地址后来被改或被删，订单上的收货信息都不能变。
     address_snapshot = models.JSONField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    refunded_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     cancel_reason = models.CharField(max_length=200, blank=True, default="")
+    refund_reason = models.CharField(max_length=200, blank=True, default="")
     client_token = models.CharField(max_length=64, null=True, blank=True)
     remark = models.CharField(max_length=200, blank=True, default="")
 

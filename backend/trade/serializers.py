@@ -48,6 +48,10 @@ class OrderPaySerializer(serializers.Serializer):
     trade_no = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
 
 
+class OrderRefundSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+
+
 class PaymentCallbackSerializer(serializers.Serializer):
     order_no = serializers.CharField(max_length=32)
     trade_no = serializers.CharField(max_length=64)
@@ -103,6 +107,8 @@ class OrderDetailSerializer(OrderListSerializer):
             "remark",
             "cancel_reason",
             "paid_at",
+            "refunded_at",
+            "refund_reason",
             "closed_at",
             "address_snapshot",
         ]

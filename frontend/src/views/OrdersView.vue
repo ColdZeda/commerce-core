@@ -4,7 +4,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { fetchMyCoupons } from '../api/coupons'
-import { cancelOrder, fetchOrder, fetchOrders, payOrder } from '../api/orders'
+import { cancelOrder, fetchOrder, fetchOrders, payOrder, refundOrder } from '../api/orders'
 import { submitOrderReview } from '../api/reviews'
 
 const TABS = [
@@ -13,9 +13,10 @@ const TABS = [
   { name: 'paid', label: '已支付' },
   { name: 'cancelled', label: '已取消' },
   { name: 'closed', label: '已关闭' },
+  { name: 'refunded', label: '已退款' },
 ]
 
-const STATUS_TYPES = { 0: 'warning', 1: 'success', 2: 'info', 3: 'info' }
+const STATUS_TYPES = { 0: 'warning', 1: 'success', 2: 'info', 3: 'info', 4: 'danger' }
 
 const CANCEL_ERRORS = {
   ORDER_STATUS_INVALID: '这单已经不是待支付状态了',
@@ -26,6 +27,12 @@ const PAY_ERRORS = {
   PAY_NOT_ENABLED: '这个环境没有开启模拟支付',
   ORDER_NOT_PAYABLE: '这单已经不能支付了',
   PAY_AMOUNT_MISMATCH: '金额对不上，支付被拒',
+  NOT_FOUND: '订单不存在',
+}
+
+const REFUND_ERRORS = {
+  ORDER_ALREADY_REFUNDED: '这单已经退过款了',
+  ORDER_STATUS_INVALID: '只有已支付的订单可以退款',
   NOT_FOUND: '订单不存在',
 }
 
@@ -42,6 +49,7 @@ const detail = ref(null)
 const detailVisible = ref(false)
 const cancelling = ref('')
 const paying = ref('')
+const refunding = ref('')
 
 const coupons = ref([])
 const couponsVisible = ref(false)
@@ -67,6 +75,10 @@ function formatTime(value) {
 
 function isPending(order) {
   return order.status === 0
+}
+
+function isPaid(order) {
+  return order.status === 1
 }
 
 async function load() {
@@ -142,6 +154,35 @@ async function pay(orderNo) {
     ElMessage.warning(PAY_ERRORS[error?.response?.data?.code] || '支付失败，请稍后再试')
   } finally {
     paying.value = ''
+  }
+}
+
+async function refund(orderNo) {
+  let reason
+  try {
+    const { value } = await ElMessageBox.prompt('整单退款：库存和优惠券都会退回，原因可以不填。', '申请退款', {
+      type: 'warning',
+      inputPlaceholder: '退款原因（选填）',
+      confirmButtonText: '确认退款',
+      cancelButtonText: '再想想',
+    })
+    reason = (value || '').trim()
+  } catch {
+    return
+  }
+
+  refunding.value = orderNo
+  try {
+    const updated = await refundOrder(orderNo, reason)
+    ElMessage.success('已退款')
+    if (detail.value?.order_no === updated.order_no) {
+      detail.value = updated
+    }
+    await load()
+  } catch (error) {
+    ElMessage.warning(REFUND_ERRORS[error?.response?.data?.code] || '退款失败，请稍后再试')
+  } finally {
+    refunding.value = ''
   }
 }
 
@@ -287,6 +328,15 @@ onMounted(() => {
           >
             取消
           </el-button>
+          <el-button
+            v-if="isPaid(row)"
+            link
+            type="danger"
+            :loading="refunding === row.order_no"
+            @click="refund(row.order_no)"
+          >
+            退款
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -348,6 +398,18 @@ onMounted(() => {
           >
             {{ detail.cancel_reason }}
           </el-descriptions-item>
+          <el-descriptions-item
+            v-if="detail.refunded_at"
+            label="退款时间"
+          >
+            {{ formatTime(detail.refunded_at) }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="detail.refund_reason"
+            label="退款原因"
+          >
+            {{ detail.refund_reason }}
+          </el-descriptions-item>
         </el-descriptions>
 
         <h3 class="detail-items-title">
@@ -372,6 +434,13 @@ onMounted(() => {
             type="info"
           >
             已取消
+          </el-timeline-item>
+          <el-timeline-item
+            v-if="detail.refunded_at"
+            :timestamp="formatTime(detail.refunded_at)"
+            type="danger"
+          >
+            已退款，库存与券已退回
           </el-timeline-item>
           <el-timeline-item
             v-if="detail.closed_at"
@@ -435,6 +504,16 @@ onMounted(() => {
           @click="openReview"
         >
           评价商品（{{ pendingReviews(detail).length }}）
+        </el-button>
+        <el-button
+          v-if="isPaid(detail)"
+          type="danger"
+          plain
+          class="detail-submit"
+          :loading="refunding === detail.order_no"
+          @click="refund(detail.order_no)"
+        >
+          申请退款
         </el-button>
         <el-button
           v-if="isPending(detail)"

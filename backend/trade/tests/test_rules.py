@@ -11,16 +11,26 @@ def test_cancel_restocks_and_returns_coupon():
     assert set(rule.effects) == {RESTOCK, RETURN_COUPON}
 
 
+def test_refund_uses_the_same_effects_as_cancel():
+    rule = RULES[(Order.Status.PAID, Order.Status.REFUNDED)]
+
+    assert set(rule.effects) == {RESTOCK, RETURN_COUPON}
+
+
 def test_pay_has_no_stock_or_coupon_effects():
-    # 支付是终态迁移，只写 paid_at；退款不在本项目范围内。
+    # 支付只写 paid_at；退券与回补属于退款那条规则。
     rule = RULES[(Order.Status.PENDING, Order.Status.PAID)]
 
     assert rule.effects == ()
 
 
-def test_only_pending_orders_can_move():
-    # 终态不再有出边：取消/关闭之后不允许再迁移，否则库里会出现来回跳的订单。
-    assert {rule.source for rule in TRANSITIONS} == {Order.Status.PENDING}
+def test_only_pending_and_paid_orders_have_outgoing_edges():
+    assert {rule.source for rule in TRANSITIONS} == {Order.Status.PENDING, Order.Status.PAID}
+
+
+def test_refunded_is_terminal():
+    # 退款之后不允许再迁移，否则同一单可能被退第二次。
+    assert not [rule for rule in TRANSITIONS if rule.source == Order.Status.REFUNDED]
 
 
 def test_every_declared_effect_is_implemented():

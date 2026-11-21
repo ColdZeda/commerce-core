@@ -155,7 +155,7 @@ function logout() {
         </div>
         <div class="footer-note">
           <b>commerce-core</b>
-          <p>演示项目：下单、支付、取消、超时关单都是真实链路，但不产生真实交易，也不发货。</p>
+          <p>演示项目：下单、支付、取消、退款、超时关单都是真实链路，但不产生真实交易，也不发货。</p>
         </div>
       </div>
       <div class="footer-bar">

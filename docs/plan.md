@@ -115,7 +115,7 @@ beat 每 60 秒投递 `close_expired_orders` → worker 查 `PENDING AND expire_
 
 `/pay` 是明确的 mock 入口，配置 `ENABLE_MOCK_PAY`；`/payments/callback` 是模拟第三方回调，无 JWT，用 HMAC + 时间戳防伪造/重放。两者只调用同一个 `mark_order_paid(order_no, amount, ...)` service。
 
-无真实支付、退款、对账能力。回调对已关闭/已取消订单返回 409 并记录错误；真实系统此时应进入退款/异常处理，本项目明确不做。
+无真实支付通道；回调对已关闭/已取消订单返回 409 并记录错误。二期 S14 补了 mock 整单退款与 `/audit` 对账看板（见 §13），一期这段的"不做"到此为止。
 
 ### 2.6 开发、预演、生产
 
@@ -222,7 +222,7 @@ InnoDB、utf8mb4、UTC（`USE_TZ=True`）、BIGINT 主键、金额 `DECIMAL(10,2
 
 实现铁律：迁移用 `UPDATE ... WHERE identity=? AND status=?`，检查 rowcount。只有 rowcount=1 的赢家才能执行副作用，副作用与 UPDATE 同事务。用户取消和 beat 关单调用同一个 service，防止一边判状态一边忘记。
 
-不能写成“先读 `if status==PENDING`，再保存并回补”，否则取消与关单并发时库存会双回补。PAID 后不自动退库存/券；正确业务是退款流程，本项目不做。
+不能写成“先读 `if status==PENDING`，再保存并回补”，否则取消与关单并发时库存会双回补。PAID 之后不自动退库存/券；退款是独立动作（二期 S14 落地，见 §13.3）。
 
 在 S3 前把允许的迁移与副作用整理成可单测的规则表；后续修改状态逻辑先跑规则与回归测试。
 
@@ -560,7 +560,7 @@ Django/MySQL/Celery 是**项目级实操**；不能包装成大型生产高并�
 `review`（评论，唯一约束"一条订单明细只能评一次"）。
 
 新增字段：`Product.category / cover / description / is_featured`；
-`Order.address_snapshot`（下单时的地址副本）、`Order.refunded_at`；`Order.Status` 增加 `REFUNDED`。
+`Order.address_snapshot`（下单时的地址副本）、`Order.refunded_at / refund_reason`；`Order.Status` 增加 `REFUNDED`。
 
 新增接口：`POST /auth/register`、`GET/POST/DELETE /cart/items`、`GET/POST/PATCH/DELETE /addresses`、
 `POST /orders/{order_no}/refund`、`GET /products/{id}/reviews`、`POST /orders/{order_no}/review`、

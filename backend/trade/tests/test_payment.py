@@ -74,7 +74,7 @@ def test_pay_marks_paid_and_replays_once(auth_client, order, sku):
     order.refresh_from_db()
     assert order.status == Order.Status.PAID
     assert order.paid_at is not None
-    # 支付不退券、不回补库存：那是退款流程，本项目不做。
+    # 支付不退券、不回补库存：那两步属于退款，要单独调 /refund。
     assert SKU.objects.get(pk=sku.pk).stock == 8
 
 
