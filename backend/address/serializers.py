@@ -21,5 +21,5 @@ class AddressWriteSerializer(serializers.Serializer):
         # 只挡明显不是手机号的值，不做运营商号段校验——演示站没有真实短信通道。
         digits = value.strip().replace(" ", "").replace("-", "")
         if not digits.isdigit() or not 7 <= len(digits) <= 15:
-            raise serializers.ValidationError("请填 7 到 15 位数字")
+            raise serializers.ValidationError("手机号请填 7 到 15 位数字，可以带空格或短横线")
         return digits
