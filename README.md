@@ -5,6 +5,8 @@
 
 **线上演示**：<http://120.24.67.82:8080>（无域名、无 HTTPS，端口 8080）
 **演示账号**：`demo` / `demo1234` —— 公开账号，数据都是 seed 造的假数据，支付与退款都是 mock。
+**技术栈**：Django 5.2 + DRF · MySQL 8 · Redis 7 · Celery · uWSGI + nginx · Vue 3 + Element Plus；
+9 个业务应用、232 个用例、单机 6 个容器。
 
 > 这是求职作品。Django / MySQL / Celery 部分是**项目级实操**，不是生产级高并发经验；
 > 重点在交易链路的**正确性**——不超卖、重复请求只生效一次、状态只能沿规则表走，
@@ -192,10 +194,12 @@ stateDiagram-v2
   PD --> RF: /refund（整单）
 
   PD: 已付款
-  C: 终态 · 已回补库存、退券
-  CL: 终态 · 已回补库存、退券
-  RF: 终态 · 已回补库存、退券
+  C: 终态 · 货与券已退回
+  CL: 终态 · 货与券已退回
+  RF: 终态 · 货与券已退回
 ```
+
+三条终态的回退口径是同一条规则，具体怎么记账见 §4。
 
 状态迁移写在 `trade/rules.py` 的一张表里，每条声明"从哪到哪、必须发生哪些副作用"：
 
@@ -250,25 +254,19 @@ rowcount=1 的那一方才执行副作用。取消、关单、退款同时到达
 
 ### 库存三方案的实测（同一台开发机，2026-11-11）
 
-条件：Python 3.12 + PyMySQL，50 条线程各自连接，200 请求 / 50 并发 / 100 库存 / 每单 1 件。
-**这是并发正确性与耗时量级，不是 QPS。**
+50 条线程各自连接，200 请求 / 50 并发 / 100 库存 / 每单 1 件（**并发正确性与耗时量级，不是 QPS**）：
 
-| 场景 | 成交 | 失败 | 剩余库存 | p50 | p95 | p99 |
-|---|---|---|---|---|---|---|
-| A 悲观锁·单 SKU 扣减 | 100 | `NOT_ENOUGH`×100 | 0 | 253 ms | 389 ms | 411 ms |
-| B 乐观锁·3 次重试 | 40 | `RETRY_EXHAUSTED`×160 | 60 | 197 ms | 406 ms | 472 ms |
-| B 乐观锁·10 次重试 | 99 | `RETRY_EXHAUSTED`×101 | 1 | 629 ms | 902 ms | 1009 ms |
-| C Redis EVAL·预扣 | 100 | `INSUFFICIENT`×100 | 0 | 14 ms | 97 ms | 101 ms |
-| A 完整下单 | 100 | `STOCK_NOT_ENOUGH`×100 | 0 | 475 ms | 733 ms | 765 ms |
-| B 完整下单（单 SKU 无券） | 13 | `RETRY_EXHAUSTED`×187 | 87 | 361 ms | 455 ms | 462 ms |
+| 方案 | 结果 | 结论 |
+|---|---|---|
+| A 悲观锁（主流程） | 100/100 成交、库存归零；单 SKU 扣减 p95 ≈ 0.39 s，完整下单 p95 ≈ 0.73 s | 排队等锁，结果确定 |
+| B 乐观锁 + 3 次重试 | 只成交 40/100、剩余 60 | 有限重试在热点行上必然放弃一部分，**这是取舍不是 bug** |
+| B 乐观锁 + 10 次重试 | 成交 99/100，但 p95 涨到 0.9 s | 靠重试换成交，延迟代价明显 |
+| C Redis + Lua 预扣 | 100/100，p95 ≈ 0.1 s | 快，但跨存储一致性会引入新故障面，**不接主流程** |
 
-三条边界别混着比：
+**只能同边界横比**：C 只做一次 EVAL 预扣，A/B 的"单 SKU 扣减"只比扣减本身，
+拿 C 的 p99 去比 A/B 的完整下单事务是错的。
 
-- **边界不同**：C 只做一次 EVAL 预扣；A/B 的"单 SKU 扣减"只比扣减本身；A/B 的"完整下单"才含
-  锁、券与建单（B 那行还是单 SKU 无券）。
-- **只能同边界横比**：拿 C 的预扣 p99 去比 A/B 的完整下单事务是错的。
-- **B 的"卖不完"** 是有限重试的必然结果，不是 bug。热点场景下它换来的是不排队等锁。
-
+完整数字、三条边界与失败分布见 `docs/phases/phase4.md`；
 复现：`cd backend && python -m stocklab.bench`（只出原始数字，不出 QPS）。
 
 ---
@@ -518,13 +516,10 @@ docs/          plan.md（基线）、plan-changes.md（修订）、phases/（阶
 | 只重建 api 不重建 web = 整站 502 | nginx 启动时解析一次上游地址并缓存，api 换 IP 后连不上 | 正常部署两个镜像一起换 tag；手工 `--no-deps` 后必须补 `restart web` |
 | CI 部署"成功"但线上没变 | `部署` 步骤条件写成 `env.MODE == 'deploy'`，而 push 触发时 `inputs.mode` 为空 → 步骤 `skipped`，job 仍然绿 | 条件改成 `MODE != 'check'`；**验证部署要看服务器上的 tag，不看 job 颜色** |
 | ACR 拒收镜像 | `denied: unknown manifest class for application/vnd.oci.empty.v1+json` | buildx 默认附 provenance/SBOM，ACR 个人版不认 → `provenance: false`、`sbom: false` |
-| 服务器迁移命令"执行成功但退出码非零" | 无 TTY 时 `docker compose run` 的容器判定失败 | 一律加 `-T` |
-| 高并发下连接数打满 | stocklab 50 线程 + 应用连接 > 50 | 本地 compose `max_connections=120`（线上仍 50，线上并发由 uWSGI 2×2 限制） |
-| 乐观锁"卖不完" | 50 并发只成交 38–40/100 | **保留为结论**：有限重试在热点行上必然放弃一部分，加一列 10 次重试做对照 |
-| 退款把库存补了、看板却红了 | 对账的"回补"口径漏了 `REFUNDED`，退回来的量既不算已售也不算回补 | `RETURNED` 加上 `REFUNDED`；连 `_order_counts` 的标签一起补，并加一条"退款后仍然平"的用例 |
 | 走隧道进后台，点登录 403 | nginx 用 `Host $host` 丢了端口，浏览器 Origin 带端口，Django 的 CSRF 判不一致 | 三处 `proxy_set_header` 改成 `$http_host`；顺带修好分页响应里缺端口的绝对链接 |
-| `--staff` 建的账号进后台是空白页 | 只给了 `is_staff`，而 admin 的可见性由模型权限决定 | 改为同时给 superuser；订单/券只读仍由 `ModelAdmin` 覆写保证，超管也改不了 |
-| `.ps1` 中文全乱、还报语法错 | PowerShell 5.1 按 ANSI 读没有 BOM 的文件 | `.ps1` 存 UTF-8 **带 BOM**；Python / JS / Markdown 不要 BOM |
+
+其余几条（`compose run` 少 `-T`、stocklab 连接数打满、`.ps1` 必须带 BOM、退款后看板变红）
+记在对应阶段文档里，不占首页篇幅。
 
 ---
 
