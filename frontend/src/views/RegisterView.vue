@@ -93,8 +93,12 @@ async function submit() {
             show-password
             autocomplete="new-password"
             size="large"
-            placeholder="至少 8 位，别用纯数字"
+            placeholder="请输入密码"
           />
+          <!-- 占位符一打字就看不见了，规则得常驻在下面，否则只会在提交后被告知"太常见"。 -->
+          <p class="auth-hint">
+            至少 8 位；不能全是数字；不能与用户名太相似；别用 testtest、password 这类常见词。
+          </p>
         </el-form-item>
         <el-form-item label="确认密码">
           <el-input

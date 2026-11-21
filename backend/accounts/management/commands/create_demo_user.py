@@ -22,7 +22,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--staff",
             action="store_true",
-            help="建的是管理员账号（is_staff=True），能进 /admin/",
+            # 只有 is_staff 进后台是空白页：admin 的可见性由模型权限决定。演示后台用超级用户，
+            # 订单与券的只读不靠权限，靠 ModelAdmin 覆写（超管同样改不了）。
+            help="建的是管理员账号（superuser），能进 /admin/",
         )
         parser.add_argument(
             "--reset",
@@ -39,9 +41,10 @@ class Command(BaseCommand):
         user = User.objects.filter(username=username).first()
         if user is not None and not reset:
             # 已存在时只补权限：先建普通号、后来想让它进后台，不该逼人 --reset 换口令。
-            if want_staff and not user.is_staff:
+            if want_staff and not (user.is_staff and user.is_superuser):
                 user.is_staff = True
-                user.save(update_fields=["is_staff"])
+                user.is_superuser = True
+                user.save(update_fields=["is_staff", "is_superuser"])
                 self.stdout.write(f"账号 {username} 已存在，已补成管理员")
             else:
                 self.stdout.write(f"账号 {username} 已存在，跳过（要重设密码加 --reset）")
@@ -53,12 +56,15 @@ class Command(BaseCommand):
             password = secrets.token_urlsafe(12)
 
         if user is None:
-            User.objects.create_user(username=username, password=password, is_staff=want_staff)
+            User.objects.create_user(
+                username=username, password=password, is_staff=want_staff, is_superuser=want_staff
+            )
             action = "已创建"
         else:
             user.set_password(password)
             user.is_staff = want_staff
-            user.save(update_fields=["password", "is_staff"])
+            user.is_superuser = want_staff
+            user.save(update_fields=["password", "is_staff", "is_superuser"])
             action = "已重设密码"
 
         role = "管理员" if want_staff else "普通用户"

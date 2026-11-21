@@ -104,7 +104,9 @@ def test_snapshot_keeps_history_after_price_change(buyer, sku):
 
     assert item.unit_price == Decimal("30.00")
     assert item.subtotal == Decimal("60.00")
-    assert item.title == "默认规格"
+    # 商品名和规格都进快照：订单里只写"默认规格"看不出买的是什么。
+    assert item.title == "测试商品 默认规格"
+    assert item.sku_code != "SKU-CHANGED"
     assert order.pay_amount == Decimal("60.00")
 
 
